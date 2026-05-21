@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .config import load_settings, setup_logging
+from .config import list_accounts, load_settings, setup_logging
 from .manifest import read_manifest, resolve_asset_paths
 from .manifest_schema import ManifestError, parse_manifest
 from .publish import XhsError, upload_note
@@ -19,7 +19,8 @@ from .publish import XhsError, upload_note
 
 def publish(job: dict[str, Any], *, dry_run: bool, config: dict[str, Any]) -> dict[str, Any]:
     setup_logging()
-    settings = load_settings()
+    account = config.get("account", "default")
+    settings = load_settings(account=account)
 
     manifest_path = Path(str(config.get("manifest") or job.get("_manifest") or ""))
     if manifest_path and manifest_path.exists():
@@ -65,13 +66,16 @@ def publish(job: dict[str, Any], *, dry_run: bool, config: dict[str, Any]) -> di
 
 def fetch(*, account: str | None, since: str | None, days: int | None, dry_run: bool, config: dict[str, Any]) -> dict[str, Any]:
     """XHS metrics are not implemented in this kit yet. Returns a stub."""
+    resolved_account = account or config.get("account", "default")
+    # Touch settings so legacy-layout migration runs even on fetch-only paths.
+    load_settings(account=resolved_account)
     return {
         "platform": "xhs",
         "status": "stub",
-        "account_label": account or "default",
+        "account_label": resolved_account,
         "reason": "XHS metrics scraping not implemented in this kit",
         "dry_run": dry_run,
     }
 
 
-__all__ = ["publish", "fetch"]
+__all__ = ["publish", "fetch", "list_accounts"]

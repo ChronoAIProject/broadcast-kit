@@ -3,6 +3,8 @@
 # Consuming agents (Claude Code, Codex, ...) read this to drive the daemon loop.
 
 platform: xhs
+# Override per-account; defaults to 'default'.
+account: default
 
 current_state:
   followers: 0

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import typer
 
-from .config import Settings, file_url, load_settings, setup_logging
+from .config import Settings, file_url, list_accounts, load_settings, setup_logging
 from .cover_gen import MediaError, generate_covers_from_video
 from .manifest import read_manifest, resolve_manifest_path
 from .manifest_schema import ManifestError
@@ -123,9 +123,10 @@ def publish_command(
     cover_at_seconds: float = typer.Option(6.0, "--cover-at-seconds"),
     force_republish: bool = typer.Option(False, "--force-republish"),
     submit_publish: bool = typer.Option(True, "--submit-publish/--dry-run"),
+    account: str = typer.Option("default", "--account", help="Account label under state/douyin/<account>/"),
 ) -> None:
     setup_logging()
-    settings = load_settings()
+    settings = load_settings(account=account)
     manifest_path = manifest.expanduser().resolve()
 
     try:
@@ -217,7 +218,7 @@ def fetch_metrics_command(
     account: str = typer.Option("default", "--account"),
 ) -> None:
     setup_logging()
-    settings = load_settings()
+    settings = load_settings(account=account)
     path = fetch_metrics_impl(settings, days=days, account=account)
     typer.echo(f"metrics: {file_url(path)}")
 
@@ -225,9 +226,10 @@ def fetch_metrics_command(
 @app.command("login")
 def login_command(
     fresh: bool = typer.Option(False, "--fresh", help="Force re-login and overwrite storage state"),
+    account: str = typer.Option("default", "--account", help="Account label under state/douyin/<account>/"),
 ) -> None:
     setup_logging()
-    settings = load_settings()
+    settings = load_settings(account=account)
     from .publish import check_login_valid, interactive_login
 
     if fresh:
@@ -236,6 +238,57 @@ def login_command(
         return
     valid = check_login_valid(settings)
     typer.echo("valid" if valid else "expired")
+
+
+@app.command("accounts")
+def accounts_command(
+    live_check: bool = typer.Option(
+        False,
+        "--live-check",
+        help="Headlessly load each auth.json to verify it's still valid (slow).",
+    ),
+) -> None:
+    """List Douyin accounts under state/douyin/<account>/auth.json."""
+    setup_logging()
+    rows = list_accounts()
+
+    if not rows:
+        typer.echo("(no accounts found under state/douyin/)")
+        return
+
+    # Resolve live-check column up front so we can format a table.
+    live_results: dict[str, str] = {}
+    if live_check:
+        from .publish import check_login_valid
+
+        for entry in rows:
+            if not entry["auth_exists"]:
+                live_results[entry["account"]] = "-"
+                continue
+            try:
+                settings = load_settings(account=entry["account"])
+                live_results[entry["account"]] = "valid" if check_login_valid(settings) else "expired"
+            except Exception as exc:  # noqa: BLE001
+                live_results[entry["account"]] = f"error:{exc.__class__.__name__}"
+
+    # Compute column widths.
+    account_w = max(len("account"), max(len(r["account"]) for r in rows))
+    exists_w = len("auth_exists")
+    mtime_w = max(len("auth_mtime"), 16)
+    live_w = max(len("login_valid"), 14)
+
+    header = f"{'account':<{account_w}}  {'auth_exists':<{exists_w}}  {'auth_mtime':<{mtime_w}}  {'login_valid':<{live_w}}"
+    typer.echo(header)
+    for entry in rows:
+        exists_str = "yes" if entry["auth_exists"] else "no"
+        mtime_str = entry["auth_mtime"] or "-"
+        if live_check:
+            live_str = live_results.get(entry["account"], "-")
+        else:
+            live_str = "(run --live-check)" if entry["auth_exists"] else "-"
+        typer.echo(
+            f"{entry['account']:<{account_w}}  {exists_str:<{exists_w}}  {mtime_str:<{mtime_w}}  {live_str:<{live_w}}"
+        )
 
 
 def main() -> None:

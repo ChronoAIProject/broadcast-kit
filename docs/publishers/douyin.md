@@ -132,6 +132,86 @@ The Python entrypoint returns:
 }
 ```
 
+## Multi-account
+
+The Douyin publisher supports publishing from multiple Douyin accounts on the same host (e.g. `学术号` / `古籍号` / `个人号`). Each account has its own auth cookie, working directory, and inventory file under `state/douyin/<account>/`.
+
+**State layout**
+
+```
+state/douyin/
+  default/            # default account, used when --account is omitted
+    auth.json
+    work/             # screenshots, queue evidence, metrics
+    inventory.md
+  academic/
+    auth.json
+    work/
+    inventory.md
+  classical/
+    auth.json
+    work/
+    inventory.md
+```
+
+**First-time login for a non-default account**
+
+```bash
+python -m broadcast_kit.publishers.douyin.cli login --fresh --account academic
+```
+
+A non-headless Chromium opens; scan the QR with the target Douyin account, press Enter. `storage_state` is saved to `state/douyin/academic/auth.json`. Repeat per account.
+
+**List accounts**
+
+```bash
+python -m broadcast_kit.publishers.douyin.cli accounts
+# prints each account: label, auth.json mtime, exists?
+python -m broadcast_kit.publishers.douyin.cli accounts --live-check
+# additionally opens each account's saved cookie against creator.douyin.com to confirm it's still valid
+```
+
+**Use `--account` at every command**
+
+```bash
+# Publish from the academic account
+python -m broadcast_kit.publishers.douyin.cli publish \
+  --manifest /path/to/manifest.yaml \
+  --schedule-publish-at "2026-05-23T20:00:00+08:00" \
+  --account academic
+
+# Fetch metrics for one account
+python -m broadcast_kit.publishers.douyin.cli fetch-metrics --days 7 --account academic
+# writes state/douyin/academic/work/metrics/<YYYY-MM-DD>.jsonl
+
+# Doctor for one account or all of them
+python -m broadcast_kit.publishers.douyin.cli doctor --account academic
+python -m broadcast_kit.publishers.douyin.cli doctor --all-accounts
+
+# Same flag works on the top-level CLI
+broadcast-kit publish --platform douyin --manifest manifest.yaml --account academic
+broadcast-kit fetch-metrics --platform douyin --account academic --days 7
+broadcast-kit doctor --account academic
+```
+
+If `--account` is omitted, the publisher uses `default`.
+
+**`DOUYIN_AUTH_STATE` still wins.** If you export `DOUYIN_AUTH_STATE=/path/to/auth.json`, that explicit path is used regardless of `--account`. This preserves the single-account muscle memory for users who manage cookies via the env var.
+
+**Auto-migration**
+
+On first invocation after upgrade, if `state/douyin/auth.json` exists at the legacy path but `state/douyin/default/auth.json` does not, the file is moved into the new layout and a one-line warning is printed:
+
+```
+[migrate] state/douyin/auth.json -> state/douyin/default/auth.json
+```
+
+After migration, existing flows that didn't pass `--account` keep working — they resolve to the `default` account automatically.
+
+**Playbook per account**
+
+Playbook files now live at `state/playbook/douyin/<account>.yaml` (legacy `state/playbook/douyin.yaml` is auto-migrated on next write). The playbook YAML carries a top-level `account: <label>` field.
+
 ## Inventory dedupe
 
 If `DOUYIN_INVENTORY_FILE` points at a Markdown table tracking already-published IDs, the CLI refuses to republish unless `--force-republish` is passed. The regex `DOUYIN_INVENTORY_ID_PATTERN` extracts the ID from each table line (default: leading `|` then a word-like ID).

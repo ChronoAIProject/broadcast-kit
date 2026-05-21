@@ -4,7 +4,7 @@ from pathlib import Path
 
 import typer
 
-from .config import file_url, load_settings, setup_logging
+from .config import file_url, list_accounts, load_settings, setup_logging
 from .manifest import read_manifest, resolve_asset_paths
 from .manifest_schema import ManifestError
 from .publish import XhsError, check_login_valid, interactive_login, upload_note
@@ -17,9 +17,10 @@ app = typer.Typer(add_completion=False, help="Xiaohongshu (XHS) publisher CLI.")
 def publish_command(
     manifest: Path = typer.Option(..., "--manifest", exists=True, file_okay=True, dir_okay=False),
     submit_publish: bool = typer.Option(True, "--submit-publish/--dry-run"),
+    account: str = typer.Option("default", "--account", help="Account label under state/xhs/<account>/"),
 ) -> None:
     setup_logging()
-    settings = load_settings()
+    settings = load_settings(account=account)
     manifest_path = manifest.expanduser().resolve()
     try:
         item = read_manifest(manifest_path)
@@ -61,15 +62,48 @@ def publish_command(
 @app.command("login")
 def login_command(
     fresh: bool = typer.Option(False, "--fresh", help="Force re-login and overwrite storage state"),
+    account: str = typer.Option("default", "--account", help="Account label under state/xhs/<account>/"),
 ) -> None:
     setup_logging()
-    settings = load_settings()
+    settings = load_settings(account=account)
     if fresh:
         path = interactive_login(settings, fresh=True)
         typer.echo(f"saved: {file_url(path)}")
         return
     valid = check_login_valid(settings)
     typer.echo("valid" if valid else "expired")
+
+
+@app.command("accounts")
+def accounts_command(
+    live_check: bool = typer.Option(
+        False,
+        "--live-check",
+        help="Run check_login_valid for each account (launches headless browser).",
+    ),
+) -> None:
+    """List XHS accounts discovered under state/xhs/*/auth.json."""
+    setup_logging()
+    entries = list_accounts()
+    header = f"{'account':<14} {'auth_exists':<12} {'auth_mtime':<20} {'login_valid'}"
+    typer.echo(header)
+    if not entries:
+        typer.echo("(no accounts found — run `xhs login --fresh --account <label>`)")
+        return
+    for entry in entries:
+        exists_label = "yes" if entry["auth_exists"] else "no"
+        mtime_label = entry["auth_mtime"] or "-"
+        if live_check and entry["auth_exists"]:
+            try:
+                settings = load_settings(account=entry["account"])
+                login_label = "valid" if check_login_valid(settings) else "expired"
+            except Exception as exc:  # noqa: BLE001 — surface error in row, keep listing.
+                login_label = f"error: {exc}"
+        else:
+            login_label = "(run --live-check)"
+        typer.echo(
+            f"{entry['account']:<14} {exists_label:<12} {mtime_label:<20} {login_label}"
+        )
 
 
 def main() -> None:

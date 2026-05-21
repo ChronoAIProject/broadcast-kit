@@ -11,6 +11,7 @@ agents — Claude Code, Codex, Cursor all read/write the same file.
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import date, datetime
 from pathlib import Path
@@ -19,6 +20,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, ValidationError
 
 from .base import OptimizerError, Platform
+
+logger = logging.getLogger(__name__)
 
 
 Strategy = Literal["wide_net", "narrow_vertical", "experiment", "consolidate"]
@@ -76,6 +79,7 @@ class Playbook(BaseModel):
     model_config = {"extra": "allow"}
 
     platform: Platform
+    account: str = Field(default="default", description="Per-account scope; defaults to 'default'.")
     current_state: CurrentState = Field(default_factory=CurrentState)
     target: Target = Field(default_factory=Target)
     strategy: Strategy = "wide_net"
@@ -93,18 +97,48 @@ def _state_root() -> Path:
     return Path.cwd().resolve() / "state"
 
 
-def _playbook_path(platform: Platform, *, root: Path | None = None) -> Path:
+def _playbook_path(platform: Platform, account: str = "default", *, root: Path | None = None) -> Path:
+    """Account-aware playbook path: <root>/<platform>/<account>.yaml."""
+    base = root or (_state_root() / "playbook")
+    return base / f"{platform}" / f"{account}.yaml"
+
+
+def _legacy_playbook_path(platform: Platform, *, root: Path | None = None) -> Path:
+    """Legacy single-file path: <root>/<platform>.yaml."""
     base = root or (_state_root() / "playbook")
     return base / f"{platform}.yaml"
 
 
-def load_playbook(platform: Platform, *, root: Path | None = None) -> Playbook:
-    """Read state/playbook/<platform>.yaml. Raises OptimizerError if absent or invalid."""
+def load_playbook(platform: Platform, account: str = "default", *, root: Path | None = None) -> Playbook:
+    """Read state/playbook/<platform>/<account>.yaml.
+
+    For account="default", falls back to the legacy state/playbook/<platform>.yaml if the
+    new-layout file is absent (and logs a warning that the next write_playbook will migrate).
+    Raises OptimizerError if neither exists.
+    """
     import yaml
 
-    path = _playbook_path(platform, root=root)
+    new_path = _playbook_path(platform, account, root=root)
+    path = new_path
     if not path.exists():
-        raise OptimizerError(f"playbook not found: {path}; run `broadcast-kit playbook init --platform {platform}` first")
+        if account == "default":
+            legacy = _legacy_playbook_path(platform, root=root)
+            if legacy.exists():
+                logger.warning(
+                    "legacy playbook path detected; will migrate on next write_playbook: %s",
+                    legacy,
+                )
+                path = legacy
+            else:
+                raise OptimizerError(
+                    f"playbook not found: {new_path}; "
+                    f"run `broadcast-kit playbook init --platform {platform} --account {account}` first"
+                )
+        else:
+            raise OptimizerError(
+                f"playbook not found: {new_path}; "
+                f"run `broadcast-kit playbook init --platform {platform} --account {account}` first"
+            )
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as exc:
@@ -118,13 +152,25 @@ def load_playbook(platform: Platform, *, root: Path | None = None) -> Playbook:
 
 
 def write_playbook(playbook: Playbook, *, root: Path | None = None) -> Path:
-    """Write the playbook back to state/playbook/<platform>.yaml. Returns the path written."""
+    """Write the playbook to state/playbook/<platform>/<account>.yaml.
+
+    If a legacy single-file <root>/<platform>.yaml exists for this platform, migrate it:
+    write the new path first, then unlink the legacy file. Returns the path written.
+    """
     import yaml
 
-    path = _playbook_path(playbook.platform, root=root)
+    path = _playbook_path(playbook.platform, playbook.account, root=root)
     path.parent.mkdir(parents=True, exist_ok=True)
     data = playbook.model_dump(mode="json", exclude_none=False)
     path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+    legacy = _legacy_playbook_path(playbook.platform, root=root)
+    if legacy.exists() and legacy.is_file():
+        logger.info("migrating %s → %s", legacy, path)
+        try:
+            legacy.unlink()
+        except OSError as exc:
+            logger.warning("legacy playbook unlink failed: %s: %s", legacy, exc)
     return path
 
 
@@ -133,6 +179,8 @@ def evolve_playbook(playbook: Playbook, metrics: dict[str, Any]) -> Playbook:
 
     `metrics` shape (best-effort, all optional):
       followers, posts_total, avg_engagement_rate, top_content_type
+
+    The playbook's `account` field is preserved through the round-trip.
     """
     updated = playbook.model_dump()
     cs = updated["current_state"]
@@ -143,11 +191,35 @@ def evolve_playbook(playbook: Playbook, metrics: dict[str, Any]) -> Playbook:
 
 
 def list_playbooks(*, root: Path | None = None) -> list[Path]:
-    """Enumerate state/playbook/*.yaml files."""
+    """Enumerate playbook files across new layout AND legacy single-file layout.
+
+    Returns both:
+      - <root>/<platform>/<account>.yaml (new account-aware)
+      - <root>/<platform>.yaml           (legacy single-file)
+
+    Deduplicates: if a platform has both a legacy file and a new-layout default.yaml,
+    only the new-layout file is returned (the new layout wins).
+    """
     base = root or (_state_root() / "playbook")
     if not base.exists():
         return []
-    return sorted(p for p in base.glob("*.yaml") if p.is_file())
+
+    new_files: list[Path] = []
+    platforms_with_default = set()
+    for sub in base.iterdir():
+        if sub.is_dir():
+            for f in sub.glob("*.yaml"):
+                if f.is_file():
+                    new_files.append(f)
+                    if f.stem == "default":
+                        platforms_with_default.add(sub.name)
+
+    legacy_files = [
+        p
+        for p in base.glob("*.yaml")
+        if p.is_file() and p.stem not in platforms_with_default
+    ]
+    return sorted(new_files + legacy_files)
 
 
 __all__ = [

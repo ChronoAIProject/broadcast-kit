@@ -127,6 +127,77 @@ broadcast-kit publish --platform xhs --manifest /path/to/manifest.yaml
 
 Success detection looks for `发布成功` / `笔记发布成功` in the page body, or `published=true` in the URL. If neither marker hits, treat as `failed` and inspect the latest screenshot.
 
+## Multi-account
+
+The XHS publisher supports publishing from multiple Xiaohongshu accounts on the same host. Each account has its own auth cookie and working directory under `state/xhs/<account>/`.
+
+**State layout**
+
+```
+state/xhs/
+  default/            # default account, used when --account is omitted
+    auth.json
+    work/             # screenshots
+  academic/
+    auth.json
+    work/
+  classical/
+    auth.json
+    work/
+```
+
+**First-time login for a non-default account**
+
+```bash
+python -m broadcast_kit.publishers.xhs.cli login --fresh --account academic
+```
+
+A non-headless Chromium opens; scan the QR with the target XHS account, press Enter. `storage_state` is saved to `state/xhs/academic/auth.json`. Repeat per account.
+
+**List accounts**
+
+```bash
+python -m broadcast_kit.publishers.xhs.cli accounts
+# prints each account: label, auth.json mtime, exists?
+python -m broadcast_kit.publishers.xhs.cli accounts --live-check
+# additionally opens each account's saved cookie against creator.xiaohongshu.com to confirm validity
+```
+
+**Use `--account` at every command**
+
+```bash
+# Publish from the academic account
+python -m broadcast_kit.publishers.xhs.cli publish \
+  --manifest /path/to/manifest.yaml \
+  --account academic
+
+# Doctor for one account or all
+python -m broadcast_kit.publishers.xhs.cli doctor --account academic
+python -m broadcast_kit.publishers.xhs.cli doctor --all-accounts
+
+# Same flag on the top-level CLI
+broadcast-kit publish --platform xhs --manifest manifest.yaml --account academic
+broadcast-kit doctor --account academic
+```
+
+If `--account` is omitted, the publisher uses `default`.
+
+**`XHS_AUTH_STATE` still wins.** If you export `XHS_AUTH_STATE=/path/to/auth.json`, that explicit path is used regardless of `--account`. This preserves the single-account muscle memory for users who manage cookies via the env var.
+
+**Auto-migration**
+
+On first invocation after upgrade, if `state/xhs/auth.json` exists at the legacy path but `state/xhs/default/auth.json` does not, the file is moved into the new layout and a one-line warning is printed:
+
+```
+[migrate] state/xhs/auth.json -> state/xhs/default/auth.json
+```
+
+After migration, existing flows that didn't pass `--account` keep working — they resolve to the `default` account automatically.
+
+**Playbook per account**
+
+Playbook files now live at `state/playbook/xhs/<account>.yaml` (legacy `state/playbook/xhs.yaml` is auto-migrated on next write). The playbook YAML carries a top-level `account: <label>` field.
+
 ## Operational notes
 
 - Chromium runs **non-headless**. Same display requirement as Douyin.

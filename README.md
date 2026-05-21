@@ -2,6 +2,8 @@
 
 A self-contained, agent-facing publisher kit. Clone, install, log in once per platform, publish. Optional polish + scoring layer for content optimization sprints.
 
+> Part of the 4-piece Omega broadcast architecture (local harness + this toolkit + two content repos). See [`docs/broadcast-architecture.md`](docs/broadcast-architecture.md) for where this kit fits.
+
 **Publishers**: Douyin (full Playwright + scheduled + queue verify + metrics), XHS (Playwright note publish), X (NyxID-brokered or direct API).
 **Optimizers (optional)**: content_brain (LLM diagnostic, dbskill-style), market_role (vendored marketing-persona prompts), reviewer (10-dim severity audit with bundled rubrics), variants (A/B generate+rank), virality_check (Higgsfield CLI + bitgrit API), miss_analysis (top-K corpus + LLM diff), engagement_score (HeavyRanker + Phoenix math), playbook (sprint schema).
 
@@ -97,14 +99,18 @@ Configure the LLM provider via env: `BROADCAST_KIT_LLM_PROVIDER=openai|anthropic
 
 ## Publishers
 
-| Platform | Implementation | Login | Scheduled publish | Metrics |
-|---|---|---|---|---|
-| `douyin` | `broadcast_kit/publishers/douyin/` | Playwright `storage_state` | Yes | content-manage scraper |
-| `xhs` | `broadcast_kit/publishers/xhs/` | Playwright `storage_state` | No | not implemented |
-| `x` | `broadcast_kit/publishers/x.py` | NyxID or `X_BEARER_TOKEN` | n/a | X API v2 |
-| `youtube` | `broadcast_kit/metrics/youtube.py` | `YOUTUBE_API_KEY` | n/a | Data API v3 |
+| Platform | Implementation | Login | Scheduled publish | Metrics | Multi-account |
+|---|---|---|---|---|---|
+| `douyin` | `broadcast_kit/publishers/douyin/` | Playwright `storage_state` | Yes | content-manage scraper | Yes (`--account <label>`) |
+| `xhs` | `broadcast_kit/publishers/xhs/` | Playwright `storage_state` | No | not implemented | Yes (`--account <label>`) |
+| `x` | `broadcast_kit/publishers/x.py` | NyxID or `X_BEARER_TOKEN` | n/a | X API v2 | No (future) |
+| `youtube` | `broadcast_kit/metrics/youtube.py` | `YOUTUBE_API_KEY` | n/a | Data API v3 | n/a |
 
 TikTok and Instagram are intentionally not shipped — we don't ship stubs.
+
+### Multi-account
+
+Douyin and XHS support publishing from multiple accounts on the same host via `--account <label>`. State is partitioned at `state/<platform>/<account>/{auth.json, work/, ...}`; the default label is `"default"`, so existing single-account flows keep working unchanged (legacy `state/<platform>/auth.json` is auto-migrated to `state/<platform>/default/auth.json` on first call with a one-line warning). The flag works on `publish`, `fetch-metrics`, `produce-publish`, `doctor` (single account or `--all-accounts`), and the per-publisher `accounts` subcommand. The env var `DOUYIN_AUTH_STATE` / `XHS_AUTH_STATE` still takes precedence if you set it explicitly. Playbooks live at `state/playbook/<platform>/<account>.yaml`. X publisher is single-account in this version; multi-account for X is a future task. See [`docs/publishers/douyin.md`](docs/publishers/douyin.md) and [`docs/publishers/xhs.md`](docs/publishers/xhs.md) for the deep dive.
 
 ## Contracts
 

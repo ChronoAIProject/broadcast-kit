@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 
@@ -47,6 +48,7 @@ class Settings:
     creator_publish_url: str
     xhs_skip_submit: bool
     xhs_keep_open: bool
+    account: str = "default"
 
     def ensure_runtime_dirs(self) -> None:
         for path in (
@@ -57,13 +59,40 @@ class Settings:
             path.mkdir(parents=True, exist_ok=True)
 
 
-def load_settings() -> Settings:
-    state_root = _state_root()
-    work_root_default = state_root / "xhs" / "work"
+def _auto_migrate_legacy_layout(state_root: Path) -> None:
+    """Move state/xhs/auth.json → state/xhs/default/auth.json once.
 
-    auth_state = _path_env("XHS_AUTH_STATE", str(state_root / "xhs" / "auth.json"), state_root)
+    Idempotent: skips if target already exists, or if source doesn't exist.
+    """
+    legacy = state_root / "xhs" / "auth.json"
+    target = state_root / "xhs" / "default" / "auth.json"
+    if not legacy.exists() or not legacy.is_file():
+        return
+    if target.exists():
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    legacy.rename(target)
+    logger.info("migrated state/xhs/auth.json → state/xhs/default/auth.json")
+
+
+def load_settings(account: str = "default") -> Settings:
+    state_root = _state_root()
+    account_root = state_root / "xhs" / account
+
+    # Only auto-migrate when caller is not pinning XHS_AUTH_STATE explicitly.
+    auth_env_set = os.getenv("XHS_AUTH_STATE") is not None
+    if not auth_env_set:
+        _auto_migrate_legacy_layout(state_root)
+
+    work_root_default = account_root / "work"
+
+    auth_state = _path_env(
+        "XHS_AUTH_STATE", str(account_root / "auth.json"), state_root
+    )
     work_root = _path_env("XHS_WORK_ROOT", str(work_root_default), state_root)
-    screenshot_dir = _path_env("XHS_SCREENSHOT_DIR", str(work_root / "screenshots"), state_root)
+    screenshot_dir = _path_env(
+        "XHS_SCREENSHOT_DIR", str(work_root / "screenshots"), state_root
+    )
 
     settings = Settings(
         state_root=state_root,
@@ -76,9 +105,42 @@ def load_settings() -> Settings:
         ),
         xhs_skip_submit=_bool_env("XHS_SKIP_SUBMIT"),
         xhs_keep_open=_bool_env("XHS_KEEP_OPEN"),
+        account=account,
     )
     settings.ensure_runtime_dirs()
     return settings
+
+
+def list_accounts() -> list[dict]:
+    """Scan state/xhs/*/auth.json and return one entry per account directory.
+
+    Returns a list of dicts with keys: account, auth_path, auth_exists, auth_mtime.
+    The auth_mtime is an ISO-ish "YYYY-MM-DD HH:MM" string (empty if missing).
+    """
+    state_root = _state_root()
+    xhs_root = state_root / "xhs"
+    out: list[dict] = []
+    if not xhs_root.exists():
+        return out
+    for child in sorted(xhs_root.iterdir()):
+        if not child.is_dir():
+            continue
+        auth_path = child / "auth.json"
+        exists = auth_path.exists() and auth_path.is_file()
+        mtime = ""
+        if exists:
+            mtime = datetime.fromtimestamp(auth_path.stat().st_mtime).strftime(
+                "%Y-%m-%d %H:%M"
+            )
+        out.append(
+            {
+                "account": child.name,
+                "auth_path": str(auth_path),
+                "auth_exists": exists,
+                "auth_mtime": mtime,
+            }
+        )
+    return out
 
 
 def file_url(path: Path) -> str:

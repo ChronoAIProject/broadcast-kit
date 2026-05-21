@@ -165,6 +165,7 @@ def run(
     schedule: Optional[str],
     skip: list[str],
     dry_run: bool,
+    account: str = "default",
     video_file: Optional[Path] = None,
 ) -> dict:
     platforms = [p.strip() for p in platforms_csv.split(",") if p.strip()]
@@ -340,7 +341,7 @@ def run(
             )
             job = _build_publish_job(plat, per_draft, video_path, schedule, content_id)
             try:
-                result = publishers.publish(plat, job, dry_run=dry_run, config={})
+                result = publishers.publish(plat, job, dry_run=dry_run, config={"account": account})
                 status = str(result.get("status", "ok"))
                 detail = str(result.get("detail") or result.get("reason") or "")
                 stages.append(StageResult(f"publish:{plat}", status, detail, result))

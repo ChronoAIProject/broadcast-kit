@@ -57,8 +57,9 @@ if typer is not None:
         platform: str = typer.Option(..., "--platform", help="douyin, xhs, or x."),
         manifest: Path = typer.Option(..., "--manifest", exists=True, help="Publish job or platform manifest."),
         dry_run: bool = typer.Option(False, "--dry-run", help="Validate and plan without live publish."),
+        account: str = typer.Option("default", "--account", help="State scope (auth, screenshots, metrics, inventory). Default 'default'."),
     ) -> None:
-        _handle(publish_cmd.run, platform, manifest, dry_run)
+        _handle(publish_cmd.run, platform, manifest, dry_run, account)
 
     @app.command("produce-publish")
     def produce_publish_command(
@@ -69,6 +70,7 @@ if typer is not None:
         video_file: Optional[Path] = typer.Option(None, "--video-file", exists=True, dir_okay=False, help="Known-good final video to publish instead of generating one."),
         skip: list[str] = typer.Option([], "--skip", help="Skip a stage: notebooklm, slidesync, content_brain, market_role, reviewer, publish. Repeatable."),
         dry_run: bool = typer.Option(False, "--dry-run", help="Validate every stage without irreversible actions."),
+        account: str = typer.Option("default", "--account", help="State scope (auth, screenshots, metrics, inventory). Default 'default'."),
     ) -> None:
         _handle(
             produce_publish.run,
@@ -78,14 +80,17 @@ if typer is not None:
             schedule,
             skip,
             dry_run,
+            account,
             video_file=video_file,
         )
 
     @app.command("doctor")
     def doctor_command(
         live_login_check: bool = typer.Option(False, "--live-login-check", help="Open platform pages and verify saved login cookies."),
+        account: str = typer.Option("default", "--account", help="State scope (auth, screenshots, metrics, inventory). Default 'default'."),
+        all_accounts: bool = typer.Option(False, "--all-accounts", help="Run doctor checks against every discovered account and surface a multi-row table."),
     ) -> None:
-        _handle(doctor_cmd.run, live_login_check)
+        _handle(doctor_cmd.run, live_login_check, account, all_accounts)
 
     @app.command("registry-to-manifest")
     def registry_to_manifest_command(
@@ -113,7 +118,7 @@ if typer is not None:
     @app.command("fetch-metrics")
     def fetch_metrics_command(
         platform: str = typer.Option(..., "--platform", help="douyin, xhs, x, youtube, or all."),
-        account: Optional[str] = typer.Option(None, "--account", help="Adapter account label."),
+        account: str = typer.Option("default", "--account", help="State scope (auth, screenshots, metrics, inventory). Default 'default'."),
         since: Optional[str] = typer.Option(None, "--since", help="Date/window selector."),
         days: Optional[int] = typer.Option(None, "--days", help="Douyin metrics day window."),
         dry_run: bool = typer.Option(False, "--dry-run", help="Validate and plan without scraping."),

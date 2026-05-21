@@ -2,6 +2,8 @@
 # Copy to state/playbook/x.yaml.
 
 platform: x
+# Override per-account; defaults to 'default'.
+account: default
 
 current_state:
   followers: 0

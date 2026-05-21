@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .config import load_settings, setup_logging
+from .config import list_accounts, load_settings, setup_logging
 from .cover_gen import MediaError, generate_covers_from_video
 from .manifest import read_manifest, resolve_manifest_path
 from .manifest_schema import ManifestError
@@ -28,7 +28,8 @@ def publish(job: dict[str, Any], *, dry_run: bool, config: dict[str, Any]) -> di
     """Dispatcher entry. `job` is either a broadcast-kit publish-job dict or a BRIEF v2 manifest dict."""
 
     setup_logging()
-    settings = load_settings()
+    account = str(config.get("account", "default"))
+    settings = load_settings(account=account)
 
     manifest_path = Path(str(config.get("manifest") or job.get("_manifest") or ""))
     if manifest_path and manifest_path.exists():
@@ -127,9 +128,9 @@ def fetch(*, account: str | None, since: str | None, days: int | None, dry_run: 
     from .metrics import MetricsError, fetch_metrics
 
     setup_logging()
-    settings = load_settings()
+    account_label = account or str(config.get("account", "default"))
+    settings = load_settings(account=account_label)
     effective_days = days if days is not None else (int(since) if since and since.isdigit() else 7)
-    account_label = account or "default"
 
     if dry_run:
         return {
@@ -159,4 +160,4 @@ def fetch(*, account: str | None, since: str | None, days: int | None, dry_run: 
     }
 
 
-__all__ = ["publish", "fetch"]
+__all__ = ["publish", "fetch", "list_accounts"]

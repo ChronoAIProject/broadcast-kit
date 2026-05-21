@@ -171,6 +171,45 @@ If the same error recurs across runs, drop the **stage report JSON** in the team
 - Don't run `--force-republish` if you don't know what it does. Ask first.
 - Don't share your `state/.env` over Slack/Lark/email. If you need to send a key, use NyxID.
 
+## If you have multiple accounts
+
+If you run more than one Douyin or Xiaohongshu account from this machine (for example `学术号` / `古籍号` / `个人号`), use the `--account <label>` flag. Each account has its own login cookie and working directory; no need to log out and back in between posts.
+
+The pattern is:
+
+```bash
+# Step A — set up the host once.
+broadcast-kit setup --for tier1
+
+# Step B — log in each account separately. Pick a short label per account.
+python -m broadcast_kit.publishers.douyin.cli login --fresh --account academic
+python -m broadcast_kit.publishers.douyin.cli login --fresh --account classical
+python -m broadcast_kit.publishers.xhs.cli   login --fresh --account academic
+python -m broadcast_kit.publishers.xhs.cli   login --fresh --account classical
+
+# Step C — every publish action gets --account <label>.
+broadcast-kit publish --platform douyin --manifest manifest.yaml --account academic
+broadcast-kit publish --platform xhs    --manifest manifest.yaml --account classical
+broadcast-kit produce-publish \
+  --input ~/Desktop/我的稿件.md \
+  --video-file ~/Desktop/final.mp4 \
+  --platforms douyin,xhs \
+  --account academic \
+  --schedule "2026-05-25T20:00:00+08:00"
+```
+
+To check which accounts are set up on this machine:
+
+```bash
+python -m broadcast_kit.publishers.douyin.cli accounts
+python -m broadcast_kit.publishers.xhs.cli accounts
+# Add --live-check to actually verify each cookie against the creator center
+```
+
+If you forget `--account`, the kit uses the account labelled `default` (which is whatever was logged in before the multi-account upgrade). Existing single-account setups keep working unchanged — a one-line `[migrate]` message prints the first time you run after the upgrade.
+
+X (Twitter) does not yet support `--account` in this version. If you publish to multiple X handles, manage credentials the existing way and ignore the flag for X.
+
 ## What's next
 
 Read [`CATALOG.md`](../CATALOG.md) at the kit root when you want to do something more than the one-shot flow — running a sprint, scoring engagement after publish, generating A/B hook variants. The catalog is the menu of every part you can call.

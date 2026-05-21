@@ -33,12 +33,20 @@ def _chromium_installed() -> dict[str, Any]:
     return {"ok": False, "reason": "run `python -m playwright install chromium`"}
 
 
-def _auth_file(platform: str, state_root: Path) -> dict[str, Any]:
-    path = state_root / platform / "auth.json"
-    return {"ok": path.exists() and path.stat().st_size > 100, "path": str(path)}
+def _auth_file(platform: str, state_root: Path, account: str = "default") -> dict[str, Any]:
+    # Prefer per-account auth path when present, otherwise fall back to the
+    # legacy single-account location so this check works during the rollout.
+    scoped = state_root / platform / account / "auth.json"
+    legacy = state_root / platform / "auth.json"
+    path = scoped if scoped.exists() else legacy
+    return {
+        "ok": path.exists() and path.stat().st_size > 100,
+        "path": str(path),
+        "account": account,
+    }
 
 
-def _login_check(platform: str) -> dict[str, Any]:
+def _login_check(platform: str, account: str = "default") -> dict[str, Any]:
     try:
         if platform == "douyin":
             from broadcast_kit.publishers.douyin.config import load_settings
@@ -48,13 +56,45 @@ def _login_check(platform: str) -> dict[str, Any]:
             from broadcast_kit.publishers.xhs.publish import check_login_valid
         else:
             return {"ok": False, "reason": f"unsupported platform: {platform}"}
-        settings = load_settings()
-        return {"ok": bool(check_login_valid(settings))}
+        try:
+            settings = load_settings(account=account)
+        except TypeError:
+            # Parallel refactor may not yet have landed; fall back to the
+            # legacy no-arg signature so doctor still runs.
+            settings = load_settings()
+        return {"ok": bool(check_login_valid(settings)), "account": account}
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "reason": str(exc)}
+        return {"ok": False, "reason": str(exc), "account": account}
 
 
-def run(live_login_check: bool = False) -> dict[str, Any]:
+def _discover_accounts(platform: str) -> list[str]:
+    """Lazily import the platform's list_accounts() helper, returning ["default"] on failure."""
+    try:
+        if platform == "douyin":
+            from broadcast_kit.publishers.douyin.config import list_accounts  # type: ignore
+        elif platform == "xhs":
+            from broadcast_kit.publishers.xhs.config import list_accounts  # type: ignore
+        else:
+            return ["default"]
+        accounts = list(list_accounts() or [])
+        return accounts or ["default"]
+    except Exception:  # noqa: BLE001
+        return ["default"]
+
+
+def _per_account_state(state_root: Path, account: str, live_login_check: bool) -> dict[str, Any]:
+    block: dict[str, Any] = {
+        "account": account,
+        "douyin_auth": _auth_file("douyin", state_root, account=account),
+        "xhs_auth": _auth_file("xhs", state_root, account=account),
+    }
+    if live_login_check:
+        block["douyin_login"] = _login_check("douyin", account=account)
+        block["xhs_login"] = _login_check("xhs", account=account)
+    return block
+
+
+def run(live_login_check: bool = False, account: str = "default", all_accounts: bool = False) -> dict[str, Any]:
     """Read-only local capability check for agents after setup."""
     state_root = Path("state").resolve()
     checks: dict[str, Any] = {
@@ -82,14 +122,33 @@ def run(live_login_check: bool = False) -> dict[str, Any]:
         "state": {
             "root": str(state_root),
             "env_file": {"ok": (state_root / ".env").exists(), "path": str(state_root / ".env")},
-            "douyin_auth": _auth_file("douyin", state_root),
-            "xhs_auth": _auth_file("xhs", state_root),
+            "account": account,
+            "douyin_auth": _auth_file("douyin", state_root, account=account),
+            "xhs_auth": _auth_file("xhs", state_root, account=account),
         },
         "live_login_check": live_login_check,
+        "account": account,
+        "all_accounts": all_accounts,
     }
     if live_login_check:
-        checks["state"]["douyin_login"] = _login_check("douyin")
-        checks["state"]["xhs_login"] = _login_check("xhs")
+        checks["state"]["douyin_login"] = _login_check("douyin", account=account)
+        checks["state"]["xhs_login"] = _login_check("xhs", account=account)
+
+    if all_accounts:
+        discovered: list[str] = []
+        for plat in ("douyin", "xhs"):
+            for acct in _discover_accounts(plat):
+                if acct not in discovered:
+                    discovered.append(acct)
+        if not discovered:
+            discovered = ["default"]
+        checks["accounts"] = {
+            "discovered": discovered,
+            "rows": [
+                _per_account_state(state_root, acct, live_login_check)
+                for acct in discovered
+            ],
+        }
 
     core_blockers: list[str] = []
     if not checks["python"]["ok"]:

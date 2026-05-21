@@ -28,6 +28,10 @@ Use these tiers when setting expectations with a new teammate or agent:
 
 Run `broadcast-kit doctor` after setup. `ok_for_douyin_existing_media=true` or `ok_for_xhs_existing_media=true` means that platform should be usable for Tier 1/2. `ok_for_source_to_video=true` means Tier 3 has the required local dependencies.
 
+### Multi-account
+
+Every Tier 1/2/3 path on `douyin` and `xhs` is now `--account`-scoped. Default account label is `"default"`; omitting `--account` resolves there. State lives at `state/<platform>/<account>/{auth.json, work/, ...}` and playbooks at `state/playbook/<platform>/<account>.yaml`. See [`docs/publishers/douyin.md`](docs/publishers/douyin.md) and [`docs/publishers/xhs.md`](docs/publishers/xhs.md) for the per-account login, listing, and migration details. X is single-account in this version — multi-account for X is a future task.
+
 ## Decision tree (start here)
 
 The consuming agent should interview the user once, then jump to the matching tier + recipe. Don't run setup or the catalog tour before doing this step.
@@ -52,9 +56,9 @@ After the user signals the goal, recommend the matching `setup --for` command an
 
 | Part | Path | Purpose |
 |---|---|---|
-| Playbook schema | `broadcast_kit.optimizers.Playbook` | Pydantic model for `state/playbook/<platform>.yaml`. Fields: `current_state`, `target`, `strategy`, `sprint`, `wake_times`, `quiet_hours`, `per_task_targets`, `miss_analysis`. |
-| Playbook loader | `load_playbook(platform)` / `write_playbook(pb)` / `evolve_playbook(pb, metrics)` | Read, write, and update the playbook after a wake. |
-| Templates | `playbook/templates/{xhs,douyin,x}.yaml` | Copy to `state/playbook/<platform>.yaml` and fill in numbers. |
+| Playbook schema | `broadcast_kit.optimizers.Playbook` | Pydantic model for `state/playbook/<platform>/<account>.yaml` (douyin/xhs; X stays at `state/playbook/x.yaml`). Fields: `account` (default `"default"`), `current_state`, `target`, `strategy`, `sprint`, `wake_times`, `quiet_hours`, `per_task_targets`, `miss_analysis`. |
+| Playbook loader | `load_playbook(platform, account="default")` / `write_playbook(pb)` / `evolve_playbook(pb, metrics)` | Read, write, and update the playbook after a wake. Legacy `state/playbook/<platform>.yaml` is auto-migrated to `state/playbook/<platform>/default.yaml` on next write. |
+| Templates | `playbook/templates/{xhs,douyin,x}.yaml` | Copy to `state/playbook/<platform>/<account>.yaml` (douyin/xhs) or `state/playbook/x.yaml` (X) and fill in numbers. |
 
 **When to use**: at the start of any growth sprint, ask the user the 8 fields in the template, then write the YAML. After each wake, call `evolve_playbook(pb, measured)` and `write_playbook(pb)` to keep current_state current.
 
@@ -245,6 +249,7 @@ See `--help` per command for details.
 - Services: none
 - Platform logins: the one platform you're publishing to (douyin / xhs / x).
 - Doctor flags: `ok_for_<platform>_existing_media=true` for the target platform.
+- Account: `<label>`, default `"default"` (douyin/xhs only; X is single-account in this version).
 - Setup command: `broadcast-kit setup --for tier1`.
 
 ```python
@@ -285,7 +290,8 @@ result = publish("xhs", job={"id": "demo", "title": draft.title, "body": draft.b
 - Services: none required, optional `BITGRIT_API_KEY` for virality_check on X-like text.
 - Platform logins: the platform you're growing.
 - Doctor flags: `ok_for_<platform>_existing_media=true`.
-- Setup command: `broadcast-kit setup --for tier1` plus user-written `state/playbook/<platform>.yaml`.
+- Account: `<label>`, default `"default"` (douyin/xhs only). Playbook lives at `state/playbook/<platform>/<account>.yaml`.
+- Setup command: `broadcast-kit setup --for tier1` plus user-written `state/playbook/<platform>/<account>.yaml`.
 
 The agent runs this in its own scheduler (launchd plist, cron job, agent's own daemon — your choice).
 
@@ -350,11 +356,13 @@ User says "polish this tweet for me" → run just Recipe A's stages 1-3, no play
   - Services: none.
   - Platform logins: the platforms you're publishing to.
   - Doctor flags: `ok_for_<platform>_existing_media=true`.
+  - Account: `<label>`, default `"default"` (douyin/xhs only). Pass `--account <label>` to `produce-publish` to scope the run.
   - Setup command: `broadcast-kit setup --for tier1`.
 - Tier 3 variant (no `--video-file`):
   - Services: notebooklm-py (pip + `notebooklm login`), SlideSync CLI.
   - Platform logins: the platforms you're publishing to.
   - Doctor flags: `ok_for_source_to_video=true` and `ok_for_<platform>_existing_media=true`.
+  - Account: `<label>`, default `"default"` (douyin/xhs only).
   - Setup command: `broadcast-kit setup --for tier3`.
 
 User says "I have a finished video — publish it to Douyin and Xiaohongshu". This is the first path to prove on a new machine because it does not require source-to-video generation.
@@ -404,6 +412,7 @@ Skip flags: `--skip publish` stops right before sending; `--skip content_brain` 
 - Services: none.
 - Platform logins: the platform whose metrics you're scraping (typically douyin; X uses bearer token).
 - Doctor flags: `ok_for_<platform>_existing_media=true` for the scraper to log in.
+- Account: `<label>`, default `"default"` (douyin/xhs only). `fetch-metrics --account <label>` writes to `state/<platform>/<account>/work/metrics/<date>.jsonl`.
 - Setup command: `broadcast-kit setup --for tier1`.
 
 User has already published 50 things and wants to find the patterns:
