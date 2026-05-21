@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -249,6 +250,14 @@ def _upload_cover_axis(page: Page, cover_path: Path, axis_name: str) -> bool:
         return False
 
 
+def _cover_slots_visible(page: Page) -> tuple[bool, bool]:
+    """Conservative DOM-level evidence that both Douyin cover slots are present."""
+    body = _body_text(page, timeout=5000)
+    has_horizontal = "横封面4:3" in body or ("横封面" in body and "4:3" in body)
+    has_vertical = "竖封面3:4" in body or ("竖封面" in body and "3:4" in body)
+    return has_horizontal, has_vertical
+
+
 def _close_cover_dialog_if_open(page: Page) -> None:
     for _ in range(4):
         clicked = False
@@ -276,7 +285,49 @@ def _close_cover_dialog_if_open(page: Page) -> None:
             return
 
 
-def _page_contains_success(page: Page) -> bool:
+def _body_text(page: Page, timeout: int = 5000) -> str:
+    try:
+        return page.locator("body").inner_text(timeout=timeout)
+    except Exception:
+        return ""
+
+
+def _upload_still_running(body: str) -> bool:
+    return any(marker in body for marker in ("作品上传中", "请勿关闭页面", "上传中"))
+
+
+def _page_contains_success(page: Page, title: str | None = None) -> bool:
+    body = _body_text(page, timeout=5000)
+    if title and title in body and not _upload_still_running(body):
+        return True
+    return "发布成功" in body or "正在发布" in body
+
+
+def _wait_after_submit(page: Page, title: str, timeout_seconds: int = 300) -> None:
+    """Keep the browser alive until Douyin finishes the post-submit upload.
+
+    Douyin can navigate to the manage page while a toast still says the work is
+    uploading. Closing Chromium at that point cancels the upload, so the queue
+    check must wait for the target title to appear without an active upload
+    marker.
+    """
+    deadline = time.monotonic() + timeout_seconds
+    last_status = ""
+    while time.monotonic() < deadline:
+        body = _body_text(page, timeout=8000)
+        if title in body and not _upload_still_running(body):
+            return
+        if "发布成功" in body and not _upload_still_running(body):
+            return
+        status = "uploading" if _upload_still_running(body) else "waiting"
+        if status != last_status:
+            logger.info("post-submit wait: %s", status)
+            last_status = status
+        page.wait_for_timeout(5000)
+    raise DouyinError(f"post-submit upload did not settle within {timeout_seconds}s for title: {title}")
+
+
+def _page_contains_success_legacy(page: Page) -> bool:
     body = page.locator("body").inner_text(timeout=5000)
     return "审核中" in body or "正在发布" in body or "发布成功" in body
 
@@ -427,11 +478,18 @@ def upload_video(
         horizontal_ok = _upload_cover_axis(page, horizontal, "横封") if horizontal else True
         vertical_ok = _upload_cover_axis(page, vertical, "竖封") if vertical else True
         _close_cover_dialog_if_open(page)
-        cover_verified = bool(horizontal_ok and vertical_ok)
-        print(f"COVER_VERIFY: {cover_verified} | 双轴 DOM 已兜底检查")
+        horizontal_slot_visible, vertical_slot_visible = _cover_slots_visible(page)
+        cover_verified = bool(horizontal_ok and vertical_ok and horizontal_slot_visible and vertical_slot_visible)
+        print(
+            f"COVER_VERIFY: {cover_verified} | "
+            f"upload_ok={{'horizontal': {horizontal_ok}, 'vertical': {vertical_ok}}} "
+            f"slots_visible={{'horizontal_4_3': {horizontal_slot_visible}, 'vertical_3_4': {vertical_slot_visible}}}"
+        )
         screenshots.append(_screenshot(page, settings, "cover-after", timestamp))
         if not cover_verified:
-            raise DouyinError("COVER_VERIFY failed: horizontal or vertical cover upload was not accepted")
+            raise DouyinError(
+                "COVER_VERIFY failed: cover upload was not accepted or both 4:3/3:4 cover slots were not visible"
+            )
 
         if scheduled_publish_at is not None:
             ok = _try_set_scheduled_publish(page, scheduled_publish_at)
@@ -455,8 +513,9 @@ def upload_video(
 
         _click_submit_publish_button(page)
         page.wait_for_timeout(6000)
+        _wait_after_submit(page, title)
         screenshots.append(_screenshot(page, settings, "publish-after", timestamp))
-        success = _page_contains_success(page)
+        success = _page_contains_success(page, title=title)
 
         queue_status = "not_checked"
         queue_txt: Path | None = None
