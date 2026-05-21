@@ -258,6 +258,83 @@ def _cover_slots_visible(page: Page) -> tuple[bool, bool]:
     return has_horizontal, has_vertical
 
 
+def _cover_image_evidence(page: Page) -> dict[str, int | bool]:
+    """Verify that the cover area contains two non-empty rendered thumbnails.
+
+    Douyin has changed this widget several times: sometimes thumbnails are
+    normal ``img`` nodes, sometimes CSS backgrounds under nested divs. The
+    invariant we rely on is stricter than "file input accepted" but less brittle
+    than one class name: after both uploads, the section that contains
+    横封面4:3/竖封面3:4 must contain at least two visible image-like boxes.
+    """
+    try:
+        raw = page.evaluate(
+            """() => {
+                const normalize = (value) => String(value || "").replace(/\\s+/g, "");
+                const isVisible = (el) => {
+                    const rect = el.getBoundingClientRect();
+                    const style = window.getComputedStyle(el);
+                    return rect.width > 12 && rect.height > 12 && style.display !== "none" && style.visibility !== "hidden";
+                };
+                const nodes = Array.from(document.querySelectorAll("body *"));
+                const textNodes = nodes.filter((el) => {
+                    if (!isVisible(el)) return false;
+                    const text = normalize(el.innerText || el.textContent || "");
+                    return text.length > 0 && text.length <= 80;
+                });
+                const horizontalLabel = textNodes.find((el) => normalize(el.innerText || el.textContent || "").includes("横封面4:3"));
+                const verticalLabel = textNodes.find((el) => normalize(el.innerText || el.textContent || "").includes("竖封面3:4"));
+                if (!horizontalLabel || !verticalLabel) {
+                    return {horizontal: false, vertical: false, thumbnail_count: 0};
+                }
+                const hBox = horizontalLabel.getBoundingClientRect();
+                const vBox = verticalLabel.getBoundingClientRect();
+                const left = Math.min(hBox.left, vBox.left) - 30;
+                const right = Math.max(hBox.right, vBox.right) + 30;
+                const top = Math.min(hBox.top, vBox.top) - 180;
+                const bottom = Math.max(hBox.bottom, vBox.bottom) + 20;
+
+                const imageLike = nodes.filter((el) => {
+                    if (!isVisible(el)) return false;
+                    const box = el.getBoundingClientRect();
+                    const centerX = (box.left + box.right) / 2;
+                    const centerY = (box.top + box.bottom) / 2;
+                    if (centerX < left || centerX > right || centerY < top || centerY > bottom) return false;
+                    if (box.width < 40 || box.height < 40) return false;
+                    const style = window.getComputedStyle(el);
+                    if (style.backgroundImage && style.backgroundImage !== "none") return true;
+                    const tag = el.tagName.toLowerCase();
+                    if (tag === "canvas" || tag === "video") return true;
+                    if (tag === "img") {
+                        const img = el;
+                        return Boolean((img.currentSrc || img.src) && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0);
+                    }
+                    const aria = normalize(el.getAttribute("aria-label") || el.getAttribute("title") || "");
+                    return aria.includes("封面") && box.width >= 40 && box.height >= 40;
+                });
+                const unique = [];
+                for (const el of imageLike) {
+                    const box = el.getBoundingClientRect();
+                    const key = `${Math.round(box.left)}:${Math.round(box.top)}:${Math.round(box.width)}:${Math.round(box.height)}`;
+                    if (!unique.includes(key)) unique.push(key);
+                }
+                return {
+                    horizontal: unique.length >= 1,
+                    vertical: unique.length >= 2,
+                    thumbnail_count: unique.length,
+                };
+            }"""
+        )
+    except Exception as exc:
+        logger.warning("cover image evidence probe failed: %s", exc)
+        return {"horizontal": False, "vertical": False, "thumbnail_count": 0}
+    return {
+        "horizontal": bool(raw.get("horizontal")) if isinstance(raw, dict) else False,
+        "vertical": bool(raw.get("vertical")) if isinstance(raw, dict) else False,
+        "thumbnail_count": int(raw.get("thumbnail_count") or 0) if isinstance(raw, dict) else 0,
+    }
+
+
 def _close_cover_dialog_if_open(page: Page) -> None:
     for _ in range(4):
         clicked = False
@@ -479,11 +556,22 @@ def upload_video(
         vertical_ok = _upload_cover_axis(page, vertical, "竖封") if vertical else True
         _close_cover_dialog_if_open(page)
         horizontal_slot_visible, vertical_slot_visible = _cover_slots_visible(page)
-        cover_verified = bool(horizontal_ok and vertical_ok and horizontal_slot_visible and vertical_slot_visible)
+        cover_image_evidence = _cover_image_evidence(page)
+        cover_verified = bool(
+            horizontal_ok
+            and vertical_ok
+            and horizontal_slot_visible
+            and vertical_slot_visible
+            and cover_image_evidence["horizontal"]
+            and cover_image_evidence["vertical"]
+        )
         print(
             f"COVER_VERIFY: {cover_verified} | "
             f"upload_ok={{'horizontal': {horizontal_ok}, 'vertical': {vertical_ok}}} "
-            f"slots_visible={{'horizontal_4_3': {horizontal_slot_visible}, 'vertical_3_4': {vertical_slot_visible}}}"
+            f"slots_visible={{'horizontal_4_3': {horizontal_slot_visible}, 'vertical_3_4': {vertical_slot_visible}}} "
+            f"images_loaded={{'horizontal': {cover_image_evidence['horizontal']}, "
+            f"'vertical': {cover_image_evidence['vertical']}, "
+            f"'thumbnail_count': {cover_image_evidence['thumbnail_count']}}}"
         )
         screenshots.append(_screenshot(page, settings, "cover-after", timestamp))
         if not cover_verified:
