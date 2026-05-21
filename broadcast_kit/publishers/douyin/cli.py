@@ -292,6 +292,9 @@ def accounts_command(
 
 
 def main() -> None:
+    from broadcast_kit._pyver import require_min_python
+
+    require_min_python("broadcast_kit.publishers.douyin.cli")
     app()
 
 

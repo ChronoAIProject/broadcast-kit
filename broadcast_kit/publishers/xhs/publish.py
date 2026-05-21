@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError, sync_playwright
 
@@ -34,6 +35,14 @@ class XhsError(RuntimeError):
     pass
 
 
+class XhsLoginExpiredError(XhsError):
+    """Storage state is present but no longer accepted by creator.xiaohongshu.com.
+
+    Caller should run `python -m broadcast_kit.publishers.xhs.cli login --fresh`
+    (or the equivalent in their own wrapper) and retry.
+    """
+
+
 @dataclass(frozen=True)
 class XhsUploadResult:
     verdict: str
@@ -41,6 +50,9 @@ class XhsUploadResult:
     screenshots: list[Path]
     submitted: bool
     note_url: str | None
+    selected_topics: list[str] = field(default_factory=list)
+    submit_requested: bool = False
+    submit_effective: bool = False
 
 
 def _timestamp() -> str:
@@ -75,6 +87,26 @@ def _first_visible(page: Page, selector: str) -> bool:
 
 
 def check_login_valid(settings: Settings) -> bool:
+    """Verify the saved XHS cookie still works against the live creator center.
+
+    This is NOT a local file check. It launches a headless Chromium, navigates
+    to ``settings.creator_publish_url`` (creator.xiaohongshu.com), waits for the
+    DOM, and inspects the page for login markers. Expect 5-15 seconds of
+    wall-clock cost plus network dependency on Xiaohongshu's edge.
+
+    Failure modes the caller should expect:
+
+    - Network unreachable / DNS / TLS errors against ``creator.xiaohongshu.com``
+    - Playwright/Chromium not installed (``python -m playwright install chromium``)
+    - XHS rev'ing the login-marker selectors out from under us (returns False
+      even though the cookie is fine — re-login via ``xhs login --fresh`` will
+      surface this)
+
+    For a fast file-stat that only answers "has the user finished the first
+    interactive login yet?" without paying for a Chromium startup, use
+    :func:`broadcast_kit.publishers.xhs.config.is_auth_state_present` instead.
+    """
+
     if not settings.xhs_auth_state.exists():
         return False
     with sync_playwright() as playwright:
@@ -88,7 +120,28 @@ def check_login_valid(settings: Settings) -> bool:
     return valid
 
 
-def interactive_login(settings: Settings, fresh: bool = False) -> Path:
+def interactive_login(
+    settings: Settings,
+    fresh: bool = False,
+    on_ready_to_save: Callable[[], None] | None = None,
+) -> Path:
+    """Open a visible browser, let the user scan the QR + land on publish page, save storage state.
+
+    Args:
+        settings: XHS Settings (provides auth_state path + creator_publish_url).
+        fresh: If True, delete any existing auth state before launching.
+        on_ready_to_save: Optional callback to signal "user has finished login,
+            save storage state now." Contract: the callback MUST block until the
+            orchestrator confirms the user has finished QR scanning and is landed
+            on the publish page; it may return synchronously when ready. If None
+            (default), falls back to the legacy CLI behavior: prints a prompt and
+            blocks on `input()`. Passing a callback unblocks higher-level
+            orchestrators (custom UI, scheduled-refresh daemons, multi-account
+            parallel logins) that can't use stdin.
+
+    Returns:
+        Resolved Path to the saved storage_state JSON file.
+    """
     settings.xhs_auth_state.parent.mkdir(parents=True, exist_ok=True)
     if fresh and settings.xhs_auth_state.exists():
         settings.xhs_auth_state.unlink()
@@ -97,8 +150,11 @@ def interactive_login(settings: Settings, fresh: bool = False) -> Path:
         context = browser.new_context()
         page = context.new_page()
         page.goto(settings.creator_publish_url, wait_until="domcontentloaded", timeout=60000)
-        print("请在打开的浏览器中扫码登录小红书创作中心。看到发布页后,回到终端按 Enter。")
-        input()
+        if on_ready_to_save is None:
+            print("请在打开的浏览器中扫码登录小红书创作中心。看到发布页后,回到终端按 Enter。")
+            input()
+        else:
+            on_ready_to_save()
         context.storage_state(path=str(settings.xhs_auth_state))
         browser.close()
     logger.info("xhs auth state saved: %s", settings.xhs_auth_state)
@@ -226,7 +282,9 @@ def upload_note(
     for asset in asset_paths:
         if not asset.exists():
             raise XhsError(f"asset not found: {asset}")
+    submit_requested = bool(submit_publish)
     submit = submit_publish and not settings.xhs_skip_submit and os.getenv("XHS_SKIP_SUBMIT", "0") != "1"
+    submit_effective = bool(submit)
     timestamp = _timestamp()
     screenshots: list[Path] = []
 
@@ -240,7 +298,7 @@ def upload_note(
         page.goto(settings.creator_publish_url, wait_until="domcontentloaded", timeout=60000)
         page.wait_for_timeout(3000)
         if _first_visible(page, SELECTORS["login_markers"]):
-            raise XhsError("登录态失效,请运行 xhs login --fresh")
+            raise XhsLoginExpiredError("登录态失效,请运行 xhs login --fresh")
 
         _select_upload_tab(page, asset_kind)
         screenshots.append(_screenshot(page, settings, "tab-selected", timestamp))
@@ -265,7 +323,16 @@ def upload_note(
             browser.close()
             print("JUDGEMENT: not_submitted")
             print(f"DETAIL: {detail}")
-            return XhsUploadResult("not_submitted", detail, screenshots, False, None)
+            return XhsUploadResult(
+                "not_submitted",
+                detail,
+                screenshots,
+                False,
+                None,
+                selected_topics=selected_topics,
+                submit_requested=submit_requested,
+                submit_effective=submit_effective,
+            )
 
         _click_publish(page)
         page.wait_for_timeout(6000)
@@ -280,8 +347,26 @@ def upload_note(
             detail = f"published=true reached. selected_topics={selected_topics}"
             print("JUDGEMENT: success")
             print(f"DETAIL: {detail}")
-            return XhsUploadResult("success", detail, screenshots, True, note_url)
+            return XhsUploadResult(
+                "success",
+                detail,
+                screenshots,
+                True,
+                note_url,
+                selected_topics=selected_topics,
+                submit_requested=submit_requested,
+                submit_effective=submit_effective,
+            )
         detail = "publish click made but no success marker observed"
         print("JUDGEMENT: failed")
         print(f"DETAIL: {detail}")
-        return XhsUploadResult("failed", detail, screenshots, True, None)
+        return XhsUploadResult(
+            "failed",
+            detail,
+            screenshots,
+            True,
+            None,
+            selected_topics=selected_topics,
+            submit_requested=submit_requested,
+            submit_effective=submit_effective,
+        )

@@ -57,6 +57,40 @@ python -m broadcast_kit.publishers.xhs.cli login
 # prints "valid" or "expired"
 ```
 
+> **Note:** `check_login_valid()` is NOT a local file check. It launches a
+> headless Chromium, navigates to `creator.xiaohongshu.com`, and waits for the
+> DOM — expect **5–15 seconds** of wall-clock cost plus dependency on the user's
+> network reaching Xiaohongshu's edge. It can also time out / return false for
+> reasons unrelated to the cookie (network blips, XHS UI revs). For frequent
+> checks (per-publish preflights, hot loops), **cache the result with a short
+> TTL** instead of re-running it every call.
+
+If you only need to know whether the user has finished the **first interactive
+login** (i.e. does an `auth.json` exist yet?), use the fast file-stat helper
+`is_auth_state_present(settings)` instead — no Chromium, no network:
+
+```python
+from broadcast_kit.publishers.xhs import (
+    Settings,
+    is_auth_state_present,
+)
+from broadcast_kit.publishers.xhs.publish import check_login_valid
+
+settings = Settings.for_xhs(account="default")
+
+# Fast: just stats the file on disk. No Chromium, no network. <1 ms.
+if not is_auth_state_present(settings):
+    raise SystemExit("Run `xhs login --fresh` first.")
+
+# Slow: launches headless Chromium + hits creator.xiaohongshu.com. 5–15 s.
+# Only call this when you actually need to confirm the cookie still works.
+if not check_login_valid(settings):
+    raise SystemExit("Cookie expired — run `xhs login --fresh` again.")
+```
+
+Rule of thumb: gate first-time setup on `is_auth_state_present`, gate
+publish-time correctness on `check_login_valid` (cached).
+
 ## Manifest
 
 JSON or YAML. Example `manifest.yaml`:

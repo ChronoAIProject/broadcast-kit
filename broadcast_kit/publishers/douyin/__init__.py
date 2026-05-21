@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .config import list_accounts, load_settings, setup_logging
+from .config import is_auth_state_present, list_accounts, load_settings, setup_logging
 from .cover_gen import MediaError, generate_covers_from_video
 from .manifest import read_manifest, resolve_manifest_path
 from .manifest_schema import ManifestError
@@ -160,4 +160,4 @@ def fetch(*, account: str | None, since: str | None, days: int | None, dry_run: 
     }
 
 
-__all__ = ["publish", "fetch", "list_accounts"]
+__all__ = ["publish", "fetch", "list_accounts", "is_auth_state_present"]

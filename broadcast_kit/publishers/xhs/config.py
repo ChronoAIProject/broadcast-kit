@@ -58,6 +58,71 @@ class Settings:
         ):
             path.mkdir(parents=True, exist_ok=True)
 
+    @classmethod
+    def for_xhs(
+        cls,
+        *,
+        state_root: Path | None = None,
+        account: str = "default",
+        keep_open: bool = False,
+        skip_submit: bool = False,
+        creator_publish_url: str | None = None,
+    ) -> "Settings":
+        """Build XHS Settings programmatically, bypassing env-var pokes.
+
+        Env vars still take precedence when set (preserves CLI/legacy behavior):
+        BROADCAST_KIT_STATE_DIR, XHS_AUTH_STATE, XHS_WORK_ROOT,
+        XHS_SCREENSHOT_DIR, XHS_CREATOR_PUBLISH_URL, XHS_KEEP_OPEN,
+        XHS_SKIP_SUBMIT. Pass an explicit state_root to anchor paths anywhere
+        on disk; if None, falls back to BROADCAST_KIT_STATE_DIR / cwd/state.
+
+        Returns a fully-formed Settings with runtime dirs created
+        (ensure_runtime_dirs() is called before return).
+        """
+        # state_root: explicit arg wins; otherwise honor env / cwd default.
+        resolved_state_root = (
+            state_root.expanduser().resolve() if state_root is not None else _state_root()
+        )
+        account_root = resolved_state_root / "xhs" / account
+
+        # Only auto-migrate when caller is not pinning XHS_AUTH_STATE explicitly.
+        auth_env_set = os.getenv("XHS_AUTH_STATE") is not None
+        if not auth_env_set:
+            _auto_migrate_legacy_layout(resolved_state_root)
+
+        work_root_default = account_root / "work"
+
+        auth_state = _path_env(
+            "XHS_AUTH_STATE", str(account_root / "auth.json"), resolved_state_root
+        )
+        work_root = _path_env(
+            "XHS_WORK_ROOT", str(work_root_default), resolved_state_root
+        )
+        screenshot_dir = _path_env(
+            "XHS_SCREENSHOT_DIR", str(work_root / "screenshots"), resolved_state_root
+        )
+
+        default_publish_url = (
+            creator_publish_url
+            or "https://creator.xiaohongshu.com/publish/publish?source=official"
+        )
+
+        settings = cls(
+            state_root=resolved_state_root,
+            xhs_auth_state=auth_state,
+            work_root=work_root,
+            screenshot_dir=screenshot_dir,
+            creator_publish_url=os.getenv(
+                "XHS_CREATOR_PUBLISH_URL",
+                default_publish_url,
+            ),
+            xhs_skip_submit=_bool_env("XHS_SKIP_SUBMIT", default=skip_submit),
+            xhs_keep_open=_bool_env("XHS_KEEP_OPEN", default=keep_open),
+            account=account,
+        )
+        settings.ensure_runtime_dirs()
+        return settings
+
 
 def _auto_migrate_legacy_layout(state_root: Path) -> None:
     """Move state/xhs/auth.json → state/xhs/default/auth.json once.
@@ -76,39 +141,12 @@ def _auto_migrate_legacy_layout(state_root: Path) -> None:
 
 
 def load_settings(account: str = "default") -> Settings:
-    state_root = _state_root()
-    account_root = state_root / "xhs" / account
+    """Load XHS Settings from environment variables (legacy CLI entrypoint).
 
-    # Only auto-migrate when caller is not pinning XHS_AUTH_STATE explicitly.
-    auth_env_set = os.getenv("XHS_AUTH_STATE") is not None
-    if not auth_env_set:
-        _auto_migrate_legacy_layout(state_root)
-
-    work_root_default = account_root / "work"
-
-    auth_state = _path_env(
-        "XHS_AUTH_STATE", str(account_root / "auth.json"), state_root
-    )
-    work_root = _path_env("XHS_WORK_ROOT", str(work_root_default), state_root)
-    screenshot_dir = _path_env(
-        "XHS_SCREENSHOT_DIR", str(work_root / "screenshots"), state_root
-    )
-
-    settings = Settings(
-        state_root=state_root,
-        xhs_auth_state=auth_state,
-        work_root=work_root,
-        screenshot_dir=screenshot_dir,
-        creator_publish_url=os.getenv(
-            "XHS_CREATOR_PUBLISH_URL",
-            "https://creator.xiaohongshu.com/publish/publish?source=official",
-        ),
-        xhs_skip_submit=_bool_env("XHS_SKIP_SUBMIT"),
-        xhs_keep_open=_bool_env("XHS_KEEP_OPEN"),
-        account=account,
-    )
-    settings.ensure_runtime_dirs()
-    return settings
+    Delegates to `Settings.for_xhs(account=account)` so both code paths share
+    the same env-var resolution logic.
+    """
+    return Settings.for_xhs(account=account)
 
 
 def list_accounts() -> list[dict]:
@@ -141,6 +179,17 @@ def list_accounts() -> list[dict]:
             }
         )
     return out
+
+
+def is_auth_state_present(settings: Settings) -> bool:
+    """Fast file-stat: does the storage_state json exist on disk?
+
+    Does NOT validate the cookie. Use when you only need to know whether
+    the user has finished the first interactive login yet. Pair with
+    `check_login_valid()` only when you need to confirm the cookie still
+    works against the live platform (which costs a Chromium startup).
+    """
+    return settings.xhs_auth_state.exists() and settings.xhs_auth_state.is_file()
 
 
 def file_url(path: Path) -> str:

@@ -178,5 +178,16 @@ def list_accounts() -> list[dict]:
     return results
 
 
+def is_auth_state_present(settings: Settings) -> bool:
+    """Fast file-stat: does the storage_state json exist on disk?
+
+    Does NOT validate the cookie. Use when you only need to know whether
+    the user has finished the first interactive login yet. Pair with
+    `check_login_valid()` only when you need to confirm the cookie still
+    works against the live platform (which costs a Chromium startup).
+    """
+    return settings.douyin_auth_state.exists() and settings.douyin_auth_state.is_file()
+
+
 def file_url(path: Path) -> str:
     return path.resolve().as_uri()

@@ -112,6 +112,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from broadcast_kit._pyver import require_min_python
+
+    require_min_python("broadcast_kit.adapters.notebooklm.cli")
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

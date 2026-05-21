@@ -178,12 +178,18 @@ if typer is not None:
         _handle(optimize_cmd.engagement, metrics, scorer)
 
     def main() -> None:
+        from broadcast_kit._pyver import require_min_python
+
+        require_min_python("broadcast_kit.cli")
         app()
 
 else:
     app = None
 
     def main() -> None:
+        from broadcast_kit._pyver import require_min_python
+
+        require_min_python("broadcast_kit.cli")
         raise RuntimeError("Typer is required to run the broadcast-kit CLI. Install the package with pip first.")
 
 

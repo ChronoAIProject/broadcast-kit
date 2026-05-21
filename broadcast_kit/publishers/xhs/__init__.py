@@ -11,10 +11,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .config import list_accounts, load_settings, setup_logging
+from .config import Settings, is_auth_state_present, list_accounts, load_settings, setup_logging
 from .manifest import read_manifest, resolve_asset_paths
 from .manifest_schema import ManifestError, parse_manifest
-from .publish import XhsError, upload_note
+from .publish import (
+    XhsError,
+    XhsLoginExpiredError,
+    XhsUploadResult,
+    upload_note,
+)
 
 
 def publish(job: dict[str, Any], *, dry_run: bool, config: dict[str, Any]) -> dict[str, Any]:
@@ -78,4 +83,13 @@ def fetch(*, account: str | None, since: str | None, days: int | None, dry_run: 
     }
 
 
-__all__ = ["publish", "fetch", "list_accounts"]
+__all__ = [
+    "publish",
+    "fetch",
+    "list_accounts",
+    "is_auth_state_present",
+    "Settings",
+    "XhsError",
+    "XhsLoginExpiredError",
+    "XhsUploadResult",
+]
