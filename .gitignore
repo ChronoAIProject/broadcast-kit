@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+.DS_Store
+dist/
+build/
+*.egg-info/
+
+# Runtime state (auth cookies, screenshots, scheduled state, metrics)
+state/*/auth.json
+state/*/work/
+state/*/playwright_tmp/
+
+# Allow .keep markers so the directory layout stays under source
+!state/*/.keep

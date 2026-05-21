@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://broadcast-kit.local/contracts/content-batch.schema.json",
+  "title": "Broadcast Kit Content Batch",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["batch_id", "generated_at", "source", "items"],
+  "properties": {
+    "batch_id": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "path"],
+      "properties": {
+        "type": { "type": "string", "enum": ["markdown", "directory", "repo", "publish_registry"] },
+        "path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "content_id",
+          "source_path",
+          "language",
+          "title",
+          "caption",
+          "hashtags",
+          "chapters",
+          "visual_direction",
+          "platform_targets"
+        ],
+        "properties": {
+          "content_id": { "type": "string", "minLength": 1 },
+          "source_path": { "type": "string", "minLength": 1 },
+          "language": { "type": "string", "enum": ["zh", "en", "zh-en"] },
+          "title": { "type": "string", "minLength": 1 },
+          "caption": { "type": "string", "minLength": 1 },
+          "hashtags": { "type": "array", "items": { "type": "string" } },
+          "chapters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["chapter_id", "start_hint", "duration_hint_seconds", "summary"],
+              "properties": {
+                "chapter_id": { "type": "string" },
+                "start_hint": { "type": "number" },
+                "duration_hint_seconds": { "type": "number" },
+                "summary": { "type": "string" }
+              }
+            }
+          },
+          "visual_direction": { "type": "string" },
+          "platform_targets": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["douyin", "xhs", "x"] }
+          }
+        }
+      }
+    }
+  }
+}

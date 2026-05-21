@@ -1,0 +1,57 @@
+name: xhs-default
+platform: xhs
+publish_threshold: -5
+dimensions:
+  - name: hook_first_line
+    description: "First line must hit a real user feeling or specific moment — not a product summary."
+    weight: 1.0
+    severity_hint:
+      BLOCK: "first line is a product / feature summary with no feeling"
+      WARN: "first line is generic ('今天分享一下…')"
+  - name: title_pattern_fit
+    description: "Title fits one canonical XHS pattern: self-discovery, counter-intuition, relationship insight, test-bait, or screenshot-led."
+    weight: 1.0
+    severity_hint:
+      WARN: "title is descriptive but matches no canonical pattern"
+  - name: body_structure
+    description: "Body follows 4-part XHS shape: hook → screenshot or case → relatable scene → soft CTA."
+    weight: 1.0
+    severity_hint:
+      WARN: "missing one of the four parts (most often the relatable scene or the soft CTA)"
+  - name: topic_relevance
+    description: "Topics are selectable through the XHS topic-picker (#话题#), not raw hashtags pasted as text."
+    weight: 1.0
+    severity_hint:
+      BLOCK: "topics are bare hashtag strings instead of selected topics"
+  - name: ai_taste
+    description: "Block obvious AI rhetorical templates: 总之, 综上所述, 干货满满, 看完这篇你就懂了."
+    weight: 1.0
+    severity_hint:
+      BLOCK: "contains one of: 总之, 综上所述, 干货满满"
+      WARN: "rhetorical scaffolding feels AI-templated"
+  - name: emoji_density
+    description: "Moderate emoji density. XHS norm is ~1 emoji per 2–4 lines."
+    weight: 1.0
+    severity_hint:
+      WARN: "fewer than 1 emoji total OR more than 1 emoji per line"
+  - name: safety_proxy
+    description: "Block absolute fate claims, medical guarantees, financial guarantees."
+    weight: 2.0
+    severity_hint:
+      BLOCK: "absolute fate, medical cure, or guaranteed financial return claim"
+  - name: screenshot_alignment
+    description: "When this is a feature post, body must reference one concrete screenshot module by name."
+    weight: 1.0
+    severity_hint:
+      WARN: "feature post but no specific screenshot module referenced"
+  - name: length_fit
+    description: "Title ≤20 chars; body within the ~800-char sweet spot."
+    weight: 1.0
+    severity_hint:
+      BLOCK: "title >20 chars"
+      WARN: "body <200 or >1200 chars"
+  - name: read_pace
+    description: "Short sentences; blank lines between paragraphs; no wall of text."
+    weight: 1.0
+    severity_hint:
+      WARN: "any paragraph >5 sentences with no break"

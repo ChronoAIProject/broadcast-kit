@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://broadcast-kit.local/contracts/publish-job.schema.json",
+  "title": "Broadcast Kit Publish Job",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "publish_job_id",
+    "platform",
+    "account_label",
+    "content_id",
+    "title",
+    "source_path",
+    "dry_run"
+  ],
+  "properties": {
+    "publish_job_id": { "type": "string", "minLength": 1 },
+    "platform": { "type": "string", "enum": ["douyin", "xhs", "x"] },
+    "account_label": { "type": "string" },
+    "content_id": { "type": "string" },
+    "title": { "type": "string" },
+    "caption": { "type": "string" },
+    "body": { "type": "string" },
+    "hashtags": { "type": "array", "items": { "type": "string" } },
+    "video_file": { "type": "string" },
+    "video_url": { "type": ["string", "null"] },
+    "cover_horizontal_file": { "type": "string" },
+    "cover_vertical_file": { "type": "string" },
+    "schedule_at": { "type": "string", "format": "date-time" },
+    "douyin_schedule_publish_at": { "type": "string", "format": "date-time" },
+    "source_path": { "type": "string" },
+    "dry_run": { "type": "boolean" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "platform": { "const": "douyin" } } },
+      "then": { "required": ["caption", "hashtags", "video_file", "cover_horizontal_file", "cover_vertical_file", "schedule_at", "douyin_schedule_publish_at"] }
+    },
+    {
+      "if": { "properties": { "platform": { "const": "xhs" } } },
+      "then": { "required": ["caption", "hashtags", "schedule_at"] }
+    },
+    {
+      "if": { "properties": { "platform": { "const": "x" } } },
+      "then": { "required": ["body"] }
+    }
+  ]
+}

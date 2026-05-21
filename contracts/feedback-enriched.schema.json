@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://broadcast-kit.local/contracts/feedback-enriched.schema.json",
+  "title": "Broadcast Kit Enriched Feedback",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "record_type",
+    "enriched_at",
+    "content_id",
+    "title",
+    "platform",
+    "matched",
+    "experiment",
+    "metrics",
+    "scores"
+  ],
+  "properties": {
+    "schema_version": { "const": "broadcast.feedback.v0" },
+    "record_type": { "const": "post_feedback" },
+    "enriched_at": { "type": "string", "format": "date-time" },
+    "content_id": { "type": ["string", "null"] },
+    "title": { "type": ["string", "null"] },
+    "publish_time": { "type": ["string", "null"] },
+    "status": { "type": ["string", "null"] },
+    "platform": { "type": "string" },
+    "account": { "type": ["string", "null"] },
+    "source_metrics_path": { "type": "string" },
+    "source_manifest_path": { "type": ["string", "null"] },
+    "matched": { "type": "boolean" },
+    "experiment": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "experiment_id": { "type": ["string", "number", "null"] },
+        "variant_id": { "type": ["string", "number", "null"] },
+        "template_id": { "type": ["string", "number", "null"] },
+        "hook_variant": { "type": ["string", "number", "null"] },
+        "cover_variant": { "type": ["string", "number", "null"] },
+        "duration_variant": { "type": ["string", "number", "null"] },
+        "brand_frame_variant": { "type": ["string", "number", "null"] },
+        "caption_variant": { "type": ["string", "number", "null"] }
+      }
+    },
+    "metrics": { "type": "object", "additionalProperties": true },
+    "scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["weighted_score", "retention_proxy", "engagement_rate", "share_rate", "save_rate"],
+      "properties": {
+        "weighted_score": { "type": ["number", "null"] },
+        "retention_proxy": { "type": ["number", "null"] },
+        "engagement_rate": { "type": ["number", "null"] },
+        "share_rate": { "type": ["number", "null"] },
+        "save_rate": { "type": ["number", "null"] }
+      }
+    }
+  }
+}

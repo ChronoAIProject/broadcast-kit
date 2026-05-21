@@ -1,0 +1,19 @@
+{
+  "name": "broadcast-kit",
+  "version": "0.1.0",
+  "description": "Broadcast Kit skills for Claude-compatible agent workflows.",
+  "skills": [
+    "skills/broadcast-pipeline",
+    "skills/broadcast-doc-to-batch",
+    "skills/broadcast-render-narration",
+    "skills/broadcast-render-video",
+    "skills/broadcast-publish-douyin",
+    "skills/broadcast-publish-xhs",
+    "skills/broadcast-publish-x",
+    "skills/broadcast-registry-to-manifest",
+    "skills/broadcast-fetch-metrics",
+    "skills/broadcast-enrich-metrics",
+    "skills/broadcast-optimize"
+  ],
+  "entrypoint": "broadcast-kit"
+}

@@ -1,0 +1,45 @@
+# XHS (Xiaohongshu) playbook template.
+# Copy to state/playbook/xhs.yaml and fill in real numbers.
+# Consuming agents (Claude Code, Codex, ...) read this to drive the daemon loop.
+
+platform: xhs
+
+current_state:
+  followers: 0
+  posts_total: 0
+  avg_engagement_rate: 0.0
+  top_content_type: image_carousel
+
+target:
+  followers_4w: 1500
+  engagement_rate: 0.05
+  posts_per_week: 14
+
+strategy: wide_net   # one of: wide_net | narrow_vertical | experiment | consolidate
+
+sprint:
+  start: 2026-05-20
+  end:   2026-06-17
+  pace:
+    daily: 2
+    weekly: 14
+
+# Two wake times per day, local timezone. Daemons should add ±30min jitter.
+wake_times:
+  - "09:30"
+  - "20:00"
+
+# No publish between these hours.
+quiet_hours:
+  - "01:00"
+  - "07:00"
+
+per_task_targets:
+  impressions_p50: 2000
+  saves_p50: 25
+  replies_p50: 8
+
+miss_analysis:
+  retrieve_top_k: 5
+  corpus_window_days: 30
+  vertical_tag: ""   # optional: e.g. "philosophy/庄子"

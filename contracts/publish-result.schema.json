@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://broadcast-kit.local/contracts/publish-result.schema.json",
+  "title": "Broadcast Kit Publish Result",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "status", "judgement", "cover_verify", "queue_verify", "evidence", "inventory_checked", "published_at"],
+      "properties": {
+        "platform": { "const": "douyin" },
+        "status": { "type": "string", "enum": ["success", "failed", "not_submitted", "skipped"] },
+        "judgement": { "type": "string", "enum": ["success", "failed"] },
+        "cover_verify": { "type": "boolean" },
+        "queue_verify": { "type": "boolean" },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["publish_after_screenshot", "queue_text", "queue_screenshot"],
+          "properties": {
+            "publish_after_screenshot": { "type": "string" },
+            "queue_text": { "type": "string" },
+            "queue_screenshot": { "type": "string" }
+          }
+        },
+        "inventory_checked": { "type": "boolean" },
+        "published_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["platform", "status"],
+      "properties": {
+        "platform": { "type": "string", "enum": ["xhs", "x"] },
+        "status": { "type": "string", "enum": ["success", "failed", "queued_handoff", "not_submitted", "dry_run", "error", "skipped", "stub"] }
+      }
+    }
+  ]
+}

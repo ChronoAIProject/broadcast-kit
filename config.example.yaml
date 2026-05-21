@@ -1,0 +1,39 @@
+{
+  "project": {
+    "name": "<your-project>",
+    "output_root": "workspace"
+  },
+  "corpus": {
+    "sources": [
+      {
+        "label": "<source-label>",
+        "type": "markdown|directory|repo|publish_registry",
+        "path": "<path-to-source>"
+      }
+    ]
+  },
+  "channels": [
+    {
+      "platform": "douyin",
+      "account_label": "<account-label>",
+      "enabled": false,
+      "state_dir": "state/douyin",
+      "metrics_title_suffix": "<optional-title-suffix>"
+    },
+    {
+      "platform": "xhs",
+      "account_label": "<account-label>",
+      "enabled": false,
+      "state_dir": "state/xhs"
+    },
+    {
+      "platform": "x",
+      "account_label": "<account-label>",
+      "enabled": false
+    }
+  ],
+  "llm": {
+    "provider": "<provider-name>",
+    "api_key_env": "<PROVIDER_API_KEY_ENV>"
+  }
+}

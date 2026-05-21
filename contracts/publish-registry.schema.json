@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://broadcast-kit.local/contracts/publish-registry.schema.json",
+  "title": "Broadcast Kit Publish Registry",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "registry_id", "generated_at", "items"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "broadcast.publish_registry.v0" },
+    "registry_id": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "source": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "type": { "type": "string" },
+        "repo": { "type": "string" },
+        "path": { "type": "string" }
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["content_id", "title", "ready", "artifacts"],
+        "properties": {
+          "content_id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string" },
+          "language": { "type": "string" },
+          "ready": { "type": "boolean" },
+          "platform_targets": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["douyin", "xhs", "x", "youtube"] }
+          },
+          "artifacts": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "video_file": { "type": "string" },
+              "video_url": { "type": "string" },
+              "cover_horizontal_file": { "type": "string" },
+              "cover_vertical_file": { "type": "string" },
+              "article_file": { "type": "string" },
+              "slides_file": { "type": "string" }
+            }
+          },
+          "metadata": { "type": "object", "additionalProperties": true }
+        }
+      }
+    }
+  }
+}

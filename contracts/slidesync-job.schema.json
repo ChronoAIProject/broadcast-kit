@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://broadcast-kit.local/contracts/slidesync-job.schema.json",
+  "title": "Broadcast Kit SlideSync Job",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["job_id", "status", "work_dir", "output_dir", "artifacts"],
+  "properties": {
+    "job_id": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "enum": ["draft", "reviewed", "final", "error", "dry_run"] },
+    "work_dir": { "type": "string" },
+    "output_dir": { "type": "string" },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transcript_raw",
+        "transcript",
+        "diarization",
+        "slide_index",
+        "timeline_draft",
+        "timeline_reviewed",
+        "draft_video",
+        "final_video",
+        "subtitles",
+        "qa_report"
+      ],
+      "properties": {
+        "transcript_raw": { "type": "string" },
+        "transcript": { "type": "string" },
+        "diarization": { "type": "string" },
+        "slide_index": { "type": "string" },
+        "timeline_draft": { "type": "string" },
+        "timeline_reviewed": { "type": "string" },
+        "draft_video": { "type": "string" },
+        "final_video": { "type": "string" },
+        "subtitles": { "type": "string" },
+        "qa_report": { "type": "string" }
+      }
+    }
+  }
+}

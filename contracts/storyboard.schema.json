@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://broadcast-kit.local/contracts/storyboard.schema.json",
+  "title": "Broadcast Kit Storyboard",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["storyboard_id", "content_id", "duration_seconds", "format", "beats", "artifacts"],
+  "properties": {
+    "storyboard_id": { "type": "string", "minLength": 1 },
+    "content_id": { "type": "string", "minLength": 1 },
+    "duration_seconds": { "type": "number" },
+    "format": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "fps", "language_profile"],
+      "properties": {
+        "width": { "type": "integer" },
+        "height": { "type": "integer" },
+        "fps": { "type": "number" },
+        "language_profile": { "type": "string" }
+      }
+    },
+    "beats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["start", "duration", "scene", "narration_zh", "narration_en"],
+        "properties": {
+          "start": { "type": "number" },
+          "duration": { "type": "number" },
+          "scene": { "type": "string" },
+          "narration_zh": { "type": "string" },
+          "narration_en": { "type": "string" }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["storyboard_json", "hyperframes_html", "preview_image", "audio_file"],
+      "properties": {
+        "storyboard_json": { "type": "string" },
+        "hyperframes_html": { "type": "string" },
+        "preview_image": { "type": "string" },
+        "audio_file": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

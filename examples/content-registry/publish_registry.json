@@ -1,0 +1,38 @@
+{
+  "schema_version": "broadcast.publish_registry.v0",
+  "registry_id": "demo-registry",
+  "generated_at": "2026-01-01T00:00:00Z",
+  "source": {
+    "type": "directory",
+    "repo": "<your-org>/<your-content-repo>",
+    "path": "content/demo"
+  },
+  "items": [
+    {
+      "content_id": "demo_video_001",
+      "title": "Demo Knowledge Video",
+      "language": "zh",
+      "ready": true,
+      "platform_targets": ["douyin", "xhs", "x"],
+      "caption": "A concise single-paragraph caption for the demo video. #Demo #Knowledge",
+      "hashtags": ["#Demo", "#Knowledge"],
+      "artifacts": {
+        "video_file": "artifacts/demo_video_001/video.mp4",
+        "cover_horizontal_file": "artifacts/demo_video_001/cover_4_3_1200x900.png",
+        "cover_vertical_file": "artifacts/demo_video_001/cover_3_4_900x1200.png",
+        "image_files": ["artifacts/demo_video_001/cover_4_3_1200x900.png"],
+        "article_file": "content/demo/demo_video_001.md"
+      },
+      "metadata": {
+        "experiment_id": "demo-exp-001",
+        "variant_id": "hook-a",
+        "template_id": "clean-grid",
+        "hook_variant": "question-open",
+        "cover_variant": "dark-contrast",
+        "duration_variant": "90s",
+        "brand_frame_variant": "default",
+        "caption_variant": "short"
+      }
+    }
+  ]
+}

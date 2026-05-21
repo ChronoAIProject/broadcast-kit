@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://broadcast-kit.local/contracts/metrics-snapshot.schema.json",
+  "title": "Broadcast Kit Metrics Snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "record_type",
+    "snapshot_at",
+    "date",
+    "platform",
+    "account_label",
+    "account_handle",
+    "content_id",
+    "script_id",
+    "source_path",
+    "post_id",
+    "post_url",
+    "title",
+    "published_at",
+    "metrics",
+    "top_comments",
+    "partial",
+    "status",
+    "source"
+  ],
+  "properties": {
+    "schema_version": { "const": "broadcast.metrics.v0" },
+    "record_type": { "type": "string", "enum": ["post_snapshot", "account_snapshot", "collector_error", "collector_stub"] },
+    "snapshot_at": { "type": "string", "format": "date-time" },
+    "date": { "type": "string" },
+    "platform": { "type": "string", "enum": ["douyin", "xhs", "x", "youtube"] },
+    "account_label": { "type": "string" },
+    "account_handle": { "type": "string" },
+    "content_id": { "type": "string" },
+    "script_id": { "type": "string" },
+    "source_path": { "type": "string" },
+    "post_id": { "type": ["string", "null"] },
+    "post_url": { "type": ["string", "null"] },
+    "title": { "type": "string" },
+    "published_at": { "type": ["string", "null"], "format": "date-time" },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "views",
+        "likes",
+        "comments",
+        "shares",
+        "favorites",
+        "saves",
+        "completion_rate",
+        "profile_visits",
+        "follower_growth",
+        "follow_conversion"
+      ],
+      "properties": {
+        "views": { "type": ["number", "null"] },
+        "likes": { "type": ["number", "null"] },
+        "comments": { "type": ["number", "null"] },
+        "shares": { "type": ["number", "null"] },
+        "favorites": { "type": ["number", "null"] },
+        "saves": { "type": ["number", "null"] },
+        "completion_rate": { "type": ["number", "null"] },
+        "profile_visits": { "type": ["number", "null"] },
+        "follower_growth": { "type": ["number", "null"] },
+        "follow_conversion": { "type": ["number", "null"] }
+      }
+    },
+    "top_comments": { "type": "array", "items": { "type": "string" } },
+    "partial": { "type": "boolean" },
+    "status": { "type": "string", "enum": ["ok", "partial", "error", "stub"] },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adapter", "raw_path"],
+      "properties": {
+        "adapter": { "type": "string", "enum": ["broadcast-kit", "xhs-daemon"] },
+        "raw_path": { "type": "string" },
+        "collector": { "type": "string" }
+      }
+    }
+  }
+}

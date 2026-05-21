@@ -1,0 +1,56 @@
+name: x-default
+platform: x
+publish_threshold: -5
+dimensions:
+  - name: hook_strength
+    description: "First tweet must lead with a concrete artifact, named claim, or named adversary — not a meta-summary."
+    weight: 1.0
+    severity_hint:
+      BLOCK: "first tweet is a meta-summary or 'in this thread' opener"
+      WARN: "abstract claim with no artifact or named target"
+  - name: thread_arc
+    description: "Each tweet builds on the prior one; no tweet is pure filler or restatement."
+    weight: 1.0
+    severity_hint:
+      WARN: "middle tweet repeats hook without adding evidence"
+  - name: micro_rhythm
+    description: "Length variance across tweets; code blocks fine; no wall-of-text tweet."
+    weight: 1.0
+    severity_hint:
+      WARN: "two adjacent tweets are both >250 chars with no break"
+  - name: banned_phrase_ai_vocab
+    description: "Block obvious AI vocabulary: delve, let's explore, in conclusion, fascinating, journey, harness."
+    weight: 1.0
+    severity_hint:
+      BLOCK: "contains one of: delve, let's explore, in conclusion, fascinating, journey, harness"
+  - name: banger_probability
+    description: "Thread should carry at least one counter-intuitive claim OR a named target OR a concrete artifact."
+    weight: 1.0
+    severity_hint:
+      WARN: "no counter-intuitive claim, no named target, no artifact"
+  - name: spam_shape_check
+    description: "If this is a reply context, substantive vs templated — no generic 'great post!' shapes."
+    weight: 1.0
+    severity_hint:
+      BLOCK: "reply is a generic template with no specific reference to the parent"
+  - name: safety_proxy
+    description: "Block adult content, hate, violence, or unprovoked public-figure attacks."
+    weight: 2.0
+    severity_hint:
+      BLOCK: "adult, hate, violence, or public-figure attack content present"
+  - name: engagement_target
+    description: "Per HeavyRanker public weights — favor reply-bait (open questions, takes) over pure like-bait."
+    weight: 1.0
+    severity_hint:
+      WARN: "shape is pure like-bait with no reason to reply"
+  - name: voice_consistency
+    description: "No pronoun-mode mixing within the thread (don't drift between I / we / you-the-reader)."
+    weight: 1.0
+    severity_hint:
+      WARN: "thread switches pronoun mode mid-arc"
+  - name: thread_format
+    description: "Tweets separated by `---` lines; no '1/' or numeric prefixes."
+    weight: 1.0
+    severity_hint:
+      BLOCK: "uses '1/', '2/' or '(1)' tweet prefixes"
+      WARN: "missing `---` separators between tweets"

@@ -1,0 +1,42 @@
+# X (Twitter) playbook template.
+# Copy to state/playbook/x.yaml.
+
+platform: x
+
+current_state:
+  followers: 0
+  posts_total: 0
+  avg_engagement_rate: 0.0
+  top_content_type: thread
+
+target:
+  followers_4w: 2000
+  engagement_rate: 0.03
+  posts_per_week: 14
+
+strategy: experiment   # X benefits from rapid hook + format experimentation
+
+sprint:
+  start: 2026-05-20
+  end:   2026-06-17
+  pace:
+    daily: 2
+    weekly: 14
+
+wake_times:
+  - "08:00"
+  - "22:30"
+
+quiet_hours:
+  - "02:00"
+  - "06:00"
+
+per_task_targets:
+  impressions_p50: 5000
+  saves_p50: 0   # X doesn't have saves; track replies/quotes instead
+  replies_p50: 12
+
+miss_analysis:
+  retrieve_top_k: 5
+  corpus_window_days: 30
+  vertical_tag: ""

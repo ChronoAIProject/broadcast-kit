@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "broadcast-kit"
+version = "0.1.0"
+description = "Self-contained agent-facing publisher kit. Playwright-based Douyin and XHS publish flows plus X via NyxID/API, with persisted login state."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "Broadcast Kit Maintainers" }]
+dependencies = [
+  "typer>=0.12",
+  "PyYAML>=6.0",
+  "pydantic>=2.6",
+  "python-dotenv>=1.0",
+  "playwright>=1.43",
+  "Pillow>=10.0",
+]
+
+[project.optional-dependencies]
+source-to-video = [
+  "notebooklm-py>=0.1",
+]
+
+[project.scripts]
+broadcast-kit = "broadcast_kit.cli:main"
+broadcast-kit-douyin = "broadcast_kit.publishers.douyin.cli:main"
+broadcast-kit-xhs = "broadcast_kit.publishers.xhs.cli:main"
+broadcast-kit-notebooklm = "broadcast_kit.adapters.notebooklm.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["broadcast_kit"]
+artifacts = [
+  "skills",
+  "contracts",
+  "adapters",
+  ".codex-plugin",
+  ".claude-plugin",
+  ".cursor-plugin",
+  "docs",
+  "examples",
+  "tests",
+]

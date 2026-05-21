@@ -1,0 +1,55 @@
+name: douyin-default
+platform: douyin
+publish_threshold: -5
+dimensions:
+  - name: caption_single_paragraph
+    description: "Caption is exactly one paragraph; no bullets, numbering, or list markup."
+    weight: 1.0
+    severity_hint:
+      BLOCK: "caption contains list markers ('-', '1.', '•') or multiple paragraphs"
+  - name: forbidden_terms
+    description: "Block forbidden terms: 来源, *, notebooklm, slidesync, #notebooklm."
+    weight: 1.0
+    severity_hint:
+      BLOCK: "contains one of: 来源, *, notebooklm, slidesync, #notebooklm"
+  - name: hashtag_quality
+    description: "3–6 hashtags total; no spammy single-character tags."
+    weight: 1.0
+    severity_hint:
+      BLOCK: "more than 6 hashtags OR contains a single-character hashtag"
+      WARN: "fewer than 3 hashtags"
+  - name: hook_in_first_8_seconds
+    description: "When video metadata is available, the first 8 seconds must carry a payoff hook (named claim, visible artifact, or pattern-break)."
+    weight: 1.0
+    severity_hint:
+      WARN: "first 8s is a slow intro / logo / talking head with no payoff"
+  - name: audio_compatibility
+    description: "Caption does not contradict the video audio narration."
+    weight: 1.0
+    severity_hint:
+      WARN: "caption claims X but narration says not-X"
+  - name: ai_taste
+    description: "Block obvious AI rhetorical templates: 总之, 综上所述, 让我们来探索, 干货满满."
+    weight: 1.0
+    severity_hint:
+      BLOCK: "contains one of: 总之, 综上所述, 让我们来探索, 干货满满"
+  - name: compliance_risk
+    description: "No medical promises, no financial guarantees, no fortune-telling-as-fact."
+    weight: 2.0
+    severity_hint:
+      BLOCK: "promises a medical, financial, or fate outcome as guaranteed"
+  - name: title_length
+    description: "Douyin title sits in the 8–30 char sweet spot."
+    weight: 1.0
+    severity_hint:
+      WARN: "title <8 or >30 chars"
+  - name: cover_alignment
+    description: "When cover metadata is available, visible cover text matches caption tone and topic."
+    weight: 1.0
+    severity_hint:
+      WARN: "cover text contradicts or undersells the caption topic"
+  - name: scheduled_publish_validity
+    description: "When scheduled, douyin_schedule_publish_at must be a future ISO timestamp with a timezone."
+    weight: 1.0
+    severity_hint:
+      BLOCK: "scheduled time is in the past OR missing a timezone"

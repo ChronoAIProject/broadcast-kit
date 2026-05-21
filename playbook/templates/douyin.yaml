@@ -1,0 +1,42 @@
+# Douyin playbook template.
+# Copy to state/playbook/douyin.yaml.
+
+platform: douyin
+
+current_state:
+  followers: 0
+  posts_total: 0
+  avg_engagement_rate: 0.0
+  top_content_type: short_video
+
+target:
+  followers_4w: 5000
+  engagement_rate: 0.04
+  posts_per_week: 7
+
+strategy: narrow_vertical   # douyin algorithm favors a clear vertical
+
+sprint:
+  start: 2026-05-20
+  end:   2026-06-17
+  pace:
+    daily: 1
+    weekly: 7
+
+wake_times:
+  - "11:00"
+  - "21:00"
+
+quiet_hours:
+  - "01:00"
+  - "09:00"
+
+per_task_targets:
+  impressions_p50: 8000
+  saves_p50: 50
+  replies_p50: 15
+
+miss_analysis:
+  retrieve_top_k: 5
+  corpus_window_days: 30
+  vertical_tag: ""
