@@ -84,8 +84,8 @@ def verify_in_queue(
     queue_dir = settings.work_root / "queue_inspection_final"
     queue_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    txt_path = (queue_dir / "found_in_queue.txt").resolve()
-    png_path = (queue_dir / "found_in_queue.png").resolve()
+    txt_path = (queue_dir / "queue_inspection.txt").resolve()
+    png_path = (queue_dir / "queue_inspection.png").resolve()
 
     page.goto(QUEUE_URL, wait_until="domcontentloaded", timeout=120000)
     page.wait_for_timeout(4000)
@@ -118,8 +118,9 @@ def verify_in_queue(
 
     archived_txt = archived_png = None
     if slug:
-        archived_txt = (queue_dir / f"{slug}_found_in_queue_{timestamp}.txt").resolve()
-        archived_png = (queue_dir / f"{slug}_found_in_queue_{timestamp}.png").resolve()
+        evidence_label = "found_in_queue" if status == "true" else "queue_not_found"
+        archived_txt = (queue_dir / f"{slug}_{evidence_label}_{timestamp}.txt").resolve()
+        archived_png = (queue_dir / f"{slug}_{evidence_label}_{timestamp}.png").resolve()
         shutil.copy2(txt_path, archived_txt)
         shutil.copy2(png_path, archived_png)
         logger.info("queue evidence archived: %s", archived_txt)

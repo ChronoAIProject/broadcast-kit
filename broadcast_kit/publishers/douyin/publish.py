@@ -4,7 +4,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 PUBLISH_URL_FALLBACK = "https://creator.douyin.com/creator-micro/content/post/video?enter_from=publish_page"
+DOUYIN_SCHEDULE_MIN_LEAD = timedelta(hours=2)
+DOUYIN_SCHEDULE_MAX_LEAD = timedelta(days=14)
 SCREENSHOT_STAGES = ("upload-after", "upload-meta", "cover-after", "publish-before", "publish-after")
 
 SELECTORS = {
@@ -381,6 +383,46 @@ def _body_text(page: Page, timeout: int = 5000) -> str:
         return ""
 
 
+def _ensure_schedule_window(scheduled_at: datetime, now: datetime | None = None) -> None:
+    if scheduled_at.tzinfo is None:
+        raise DouyinError("scheduled publish time must include timezone")
+    current = now or datetime.now(scheduled_at.tzinfo)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=scheduled_at.tzinfo)
+    current = current.astimezone(scheduled_at.tzinfo)
+    lead = scheduled_at - current
+    if lead < DOUYIN_SCHEDULE_MIN_LEAD:
+        raise DouyinError(
+            "scheduled publish time is too soon for Douyin "
+            f"(lead={lead}, minimum={DOUYIN_SCHEDULE_MIN_LEAD})"
+        )
+    if lead > DOUYIN_SCHEDULE_MAX_LEAD:
+        raise DouyinError(
+            "scheduled publish time is outside Douyin's 14-day scheduling window "
+            f"(lead={lead}, maximum={DOUYIN_SCHEDULE_MAX_LEAD})"
+        )
+
+
+def _schedule_markers(scheduled_at: datetime) -> list[str]:
+    compact_month = f"{scheduled_at.month}月{scheduled_at.day}日 {scheduled_at:%H:%M}"
+    padded_month = scheduled_at.strftime("%m月%d日 %H:%M")
+    return [
+        scheduled_at.strftime("%Y-%m-%d %H:%M"),
+        scheduled_at.strftime("%Y-%m-%d %H:%M:%S"),
+        scheduled_at.strftime("%Y年%m月%d日 %H:%M"),
+        f"{scheduled_at.year}年{compact_month}",
+        padded_month,
+        compact_month,
+    ]
+
+
+def _schedule_bound_to_page(page: Page, scheduled_at: datetime) -> bool:
+    body = _body_text(page, timeout=8000)
+    if not any(marker in body for marker in ("定时发布", "定时发布中", "修改定时", "发布时间")):
+        return False
+    return any(marker in body for marker in _schedule_markers(scheduled_at))
+
+
 def _upload_still_running(body: str) -> bool:
     return any(marker in body for marker in ("作品上传中", "请勿关闭页面"))
 
@@ -488,6 +530,7 @@ def _click_submit_publish_button(page: Page) -> None:
 
 
 def _try_set_scheduled_publish(page: Page, scheduled_at: datetime) -> bool:
+    _ensure_schedule_window(scheduled_at)
     selectors = SELECTORS
     clicked = False
     try:
@@ -559,7 +602,7 @@ def _try_set_scheduled_publish(page: Page, scheduled_at: datetime) -> bool:
         except Exception:
             continue
     page.wait_for_timeout(1500)
-    return filled
+    return filled and _schedule_bound_to_page(page, scheduled_at)
 
 
 def upload_video(
@@ -586,6 +629,9 @@ def upload_video(
     submit = submit_publish and not settings.douyin_skip_submit and os.getenv("DOUYIN_SKIP_SUBMIT", "0") != "1"
     timestamp = _timestamp()
     screenshots: list[Path] = []
+
+    if scheduled_publish_at is not None:
+        _ensure_schedule_window(scheduled_publish_at)
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=False)
@@ -642,9 +688,15 @@ def upload_video(
                     print("DOUYIN_KEEP_OPEN=1,浏览器保持打开;按 Enter 关闭。")
                     input()
                 browser.close()
-                raise DouyinError("scheduled publish toggle/time fill failed")
+                raise DouyinError("scheduled publish toggle/time fill failed or target time not visible before submit")
 
         _wait_for_upload_ready(page)
+        if scheduled_publish_at is not None and not _schedule_bound_to_page(page, scheduled_publish_at):
+            if settings.douyin_keep_open:
+                print("DOUYIN_KEEP_OPEN=1,浏览器保持打开;按 Enter 关闭。")
+                input()
+            browser.close()
+            raise DouyinError("scheduled publish time is not visibly bound before submit; refusing to click publish")
         screenshots.append(_screenshot(page, settings, "publish-before", timestamp))
         if not submit:
             detail = "未执行最终发布点击;dry-run 完成"
