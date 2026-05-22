@@ -30,7 +30,7 @@ Quick orientation:
 1. **What it is** — a Python package with `broadcast-kit <command>` CLI. Each platform's Playwright code lives in `broadcast_kit/publishers/<platform>/`. No external repo dependency.
 2. **What you need on the host** — Python 3.11+, Chromium (`python -m playwright install chromium`), `ffmpeg` (for Douyin cover gen), a display (Playwright runs non-headless).
 3. **Where state lives** — `state/<platform>/auth.json` (gitignored). First login is interactive; subsequent runs reuse the cookie.
-4. **What you must NOT do** — don't pass raw API keys into manifests or docs; don't `--force-republish` without checking the inventory; don't run a live publish without confirming the verdict triple (Douyin) or the success marker (XHS); don't bypass `publish_decision: hold` from content_brain.
+4. **What you must NOT do** — don't pass raw API keys into manifests or docs; don't `--force-republish` without checking the inventory; don't run a live publish without confirming the verdict triple (Douyin) or the note-manager verification (XHS); don't bypass `publish_decision: hold` from content_brain.
 5. **No daemon shipped** — you (the consuming agent) decide when to wake. Use launchd / cron / your own loop. CATALOG.md Recipe B shows the full closed-loop sequence.
 
 ## Install
@@ -123,7 +123,8 @@ Runtime state (auth cookies, screenshots, scheduled state, metrics jsonl) lives 
 ## Contract rules (read before live publish)
 
 - **Douyin**: live success requires `JUDGEMENT: success` + `COVER_VERIFY: True` + `QUEUE_VERIFY: True`. Caption forbidden terms: `来源`, `*`, `notebooklm`, `slidesync`, `#notebooklm`. Manifest needs `id`, `title`, `caption`, `video_file`/`video_url`, `douyin_schedule_publish_at` (ISO 8601 + timezone). Covers auto-generate from a video frame if missing.
-- **XHS**: title ≤20 chars, body ≤1000 chars, topics through the topic-picker UI (raw `#hashtag` text is ignored by XHS as plain text). Up to 18 images or exactly 1 video per note.
+- **Public content guard**: Douyin and XHS manifest parsers reject obvious internal operating language in public text fields, such as `测试`, `短图文版本`, `Test`, `A/B`, `experiment`, and `Broadcast Test`. Keep those words in local metrics/status, not public title/body/caption/topics.
+- **XHS**: title ≤20 chars, body ≤1000 chars, topics through the topic-picker UI (raw `#hashtag` text is ignored by XHS as plain text). Up to 18 images or exactly 1 video per note. `published=true` is only a submit-page signal; production runs should verify the note in creator-center note manager and confirm the edit page shows the intended public body and media count.
 - **X**: thread separator is `---` between tweets. NyxID is preferred; `X_BEARER_TOKEN` is the fallback.
 - **Dry-run**: every publisher's dry-run mode opens Playwright, exercises every step except the final publish click. Treat it as a smoke test, not a no-op.
 

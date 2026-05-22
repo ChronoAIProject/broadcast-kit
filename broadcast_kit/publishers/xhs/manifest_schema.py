@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from broadcast_kit.public_guard import PublicContentError, assert_manifest_public_ready
+
 
 class ManifestError(ValueError):
     pass
@@ -52,6 +54,10 @@ class XhsManifestItem(BaseModel):
 
 
 def parse_manifest(data: dict[str, Any]) -> XhsManifestItem:
+    try:
+        assert_manifest_public_ready(data, "xhs")
+    except PublicContentError as exc:
+        raise ManifestError(str(exc)) from exc
     try:
         return XhsManifestItem.model_validate(data)
     except ManifestError:

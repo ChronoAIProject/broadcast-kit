@@ -164,18 +164,30 @@ def interactive_login(
 
 def _set_first_file_input(page: Page, file_path: Path, accept_image: bool = False) -> None:
     selector = SELECTORS["image_inputs"] if accept_image else SELECTORS["video_inputs"]
+    if not accept_image:
+        try:
+            page.wait_for_selector(selector, state="attached", timeout=15000)
+        except PlaywrightTimeoutError:
+            try:
+                page.get_by_role("button", name="上传视频").click(timeout=3000)
+                page.wait_for_selector(selector, state="attached", timeout=10000)
+            except Exception:
+                pass
     locator = page.locator(selector)
     count = locator.count()
-    if count == 0 and not accept_image:
-        try:
-            page.get_by_role("button", name="上传视频").click(timeout=3000)
-            page.wait_for_timeout(1500)
-            locator = page.locator(selector)
-            count = locator.count()
-        except Exception:
-            pass
     if count == 0:
         raise DouyinError(f"file input not found for {file_path}")
+    if not accept_image:
+        for index in range(count):
+            candidate = locator.nth(index)
+            try:
+                accept = (candidate.get_attribute("accept", timeout=1000) or "").lower()
+            except Exception:
+                accept = ""
+            if "image" in accept or "png" in accept or "jpg" in accept or "jpeg" in accept:
+                continue
+            candidate.set_input_files(str(file_path))
+            return
     locator.nth(count - 1).set_input_files(str(file_path))
 
 
@@ -370,7 +382,49 @@ def _body_text(page: Page, timeout: int = 5000) -> str:
 
 
 def _upload_still_running(body: str) -> bool:
-    return any(marker in body for marker in ("作品上传中", "请勿关闭页面", "上传中"))
+    return any(marker in body for marker in ("作品上传中", "请勿关闭页面"))
+
+
+def _pre_submit_upload_still_running(body: str) -> bool:
+    return any(
+        marker in body
+        for marker in (
+            "上传过程中",
+            "当前速度",
+            "剩余时间",
+            "取消上传",
+            "已上传：",
+            "已上传:",
+        )
+    )
+
+
+def _pre_submit_upload_failed(body: str) -> bool:
+    return "上传失败" in body
+
+
+def _wait_for_upload_ready(page: Page, timeout_seconds: int = 1800) -> None:
+    """Wait until Douyin's video upload panel no longer reports active upload."""
+    deadline = time.monotonic() + timeout_seconds
+    last_status = ""
+    stable_count = 0
+    while time.monotonic() < deadline:
+        body = _body_text(page, timeout=8000)
+        if _pre_submit_upload_failed(body):
+            raise DouyinError("video upload failed before submit")
+        active = _pre_submit_upload_still_running(body)
+        status = "uploading" if active else "ready"
+        if status != last_status:
+            logger.info("pre-submit upload wait: %s", status)
+            last_status = status
+        if active:
+            stable_count = 0
+        else:
+            stable_count += 1
+            if stable_count >= 3:
+                return
+        page.wait_for_timeout(5000)
+    raise DouyinError(f"video upload did not complete within {timeout_seconds}s before submit")
 
 
 def _page_contains_success(page: Page, title: str | None = None) -> bool:
@@ -380,28 +434,30 @@ def _page_contains_success(page: Page, title: str | None = None) -> bool:
     return "发布成功" in body or "正在发布" in body
 
 
-def _wait_after_submit(page: Page, title: str, timeout_seconds: int = 300) -> None:
+def _wait_after_submit(page: Page, title: str, timeout_seconds: int = 120) -> bool:
     """Keep the browser alive until Douyin finishes the post-submit upload.
 
     Douyin can navigate to the manage page while a toast still says the work is
     uploading. Closing Chromium at that point cancels the upload, so the queue
     check must wait for the target title to appear without an active upload
-    marker.
+    marker. Return False when the publish page gives no parseable settlement
+    signal; callers should still run backend queue verification before failing.
     """
     deadline = time.monotonic() + timeout_seconds
     last_status = ""
     while time.monotonic() < deadline:
         body = _body_text(page, timeout=8000)
         if title in body and not _upload_still_running(body):
-            return
+            return True
         if "发布成功" in body and not _upload_still_running(body):
-            return
+            return True
         status = "uploading" if _upload_still_running(body) else "waiting"
         if status != last_status:
             logger.info("post-submit wait: %s", status)
             last_status = status
         page.wait_for_timeout(5000)
-    raise DouyinError(f"post-submit upload did not settle within {timeout_seconds}s for title: {title}")
+    logger.info("post-submit wait: no page settlement within %ss; falling back to queue verify", timeout_seconds)
+    return False
 
 
 def _page_contains_success_legacy(page: Page) -> bool:
@@ -588,6 +644,7 @@ def upload_video(
                 browser.close()
                 raise DouyinError("scheduled publish toggle/time fill failed")
 
+        _wait_for_upload_ready(page)
         screenshots.append(_screenshot(page, settings, "publish-before", timestamp))
         if not submit:
             detail = "未执行最终发布点击;dry-run 完成"
@@ -601,14 +658,14 @@ def upload_video(
 
         _click_submit_publish_button(page)
         page.wait_for_timeout(6000)
-        _wait_after_submit(page, title)
+        page_settled = _wait_after_submit(page, title)
         screenshots.append(_screenshot(page, settings, "publish-after", timestamp))
-        success = _page_contains_success(page, title=title)
+        success = page_settled and _page_contains_success(page, title=title)
 
         queue_status = "not_checked"
         queue_txt: Path | None = None
         queue_png: Path | None = None
-        if success and queue_verify_title:
+        if queue_verify_title:
             try:
                 from .queue_verify import verify_in_queue
 
@@ -617,6 +674,8 @@ def upload_video(
                 queue_status = qv.status
                 queue_txt = qv.archived_txt or qv.txt_path
                 queue_png = qv.archived_png or qv.png_path
+                if queue_status == "true":
+                    success = True
             except Exception as exc:
                 logger.error("queue verify raised: %s", exc)
                 queue_status = "false"
@@ -626,7 +685,11 @@ def upload_video(
             input()
         browser.close()
         if success:
-            detail = "页面正文含成功/审核类提示: '审核中'"
+            detail = (
+                "后台队列核验成功"
+                if queue_status == "true" and not page_settled
+                else "页面正文含成功/审核类提示: '审核中'"
+            )
             print("JUDGEMENT: success")
             print(f"DETAIL: {detail}")
             return UploadResult(

@@ -16,14 +16,14 @@ logger = logging.getLogger(__name__)
 
 
 SELECTORS = {
-    "image_inputs": "input[type='file'][accept*='image'], input[type='file']:not([accept*='video'])",
+    "image_inputs": "input[type='file'][accept*='image'], input[type='file'][accept*='jpg'], input[type='file'][accept*='jpeg'], input[type='file'][accept*='png'], input[type='file'][accept*='webp']",
     "video_inputs": "input[type='file'][accept*='video']",
     "title_input": "input[placeholder*='标题'], input[placeholder*='起一个'], input[placeholder*='点击输入标题']",
     "body_editor": "[contenteditable='true'], textarea[placeholder*='正文'], textarea[placeholder*='添加正文'], [data-placeholder*='添加正文']",
     "topic_button": "text=话题, button:has-text('话题'), [class*='topic-btn']",
     "topic_input": "input[placeholder*='话题'], input[placeholder*='输入话题']",
     "topic_candidates": "[class*='topic-item'], [class*='topic-option'], li:has-text('#')",
-    "publish_button": "button:has-text('发布'), .xhs-publish-btn, [class*='publish-btn']",
+    "publish_button": "button:has-text('发布'), text=发布, .xhs-publish-btn, [class*='publish-btn']",
     "login_markers": "扫码登录|请登录|手机号登录|登录抖音",
     "success_markers": "发布成功|笔记发布成功|published",
     "upload_tab_image": "text=上传图文, text=图文",
@@ -86,6 +86,27 @@ def _first_visible(page: Page, selector: str) -> bool:
         return False
 
 
+def _body_text(page: Page, timeout: int = 8000) -> str:
+    try:
+        return page.locator("body").inner_text(timeout=timeout)
+    except Exception:
+        return ""
+
+
+def _wait_for_publish_app_ready(page: Page) -> None:
+    """Wait for the XHS app shell to hydrate; reload once if it stays blank."""
+    markers = ("上传图文", "上传视频", "草稿箱", "扫码登录", "请登录")
+    for attempt in range(2):
+        for _ in range(12):
+            body = _body_text(page, timeout=3000)
+            if any(marker in body for marker in markers):
+                return
+            page.wait_for_timeout(1000)
+        if attempt == 0:
+            page.reload(wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(2500)
+
+
 def check_login_valid(settings: Settings) -> bool:
     """Verify the saved XHS cookie still works against the live creator center.
 
@@ -114,8 +135,8 @@ def check_login_valid(settings: Settings) -> bool:
         context = browser.new_context(storage_state=str(settings.xhs_auth_state))
         page = context.new_page()
         page.goto(settings.creator_publish_url, wait_until="domcontentloaded", timeout=60000)
-        page.wait_for_timeout(2500)
-        valid = not _first_visible(page, SELECTORS["login_markers"])
+        _wait_for_publish_app_ready(page)
+        valid = bool(_body_text(page, timeout=3000).strip()) and not _first_visible(page, SELECTORS["login_markers"])
         browser.close()
     return valid
 
@@ -163,23 +184,49 @@ def interactive_login(
 
 def _select_upload_tab(page: Page, asset_kind: str) -> None:
     selector = SELECTORS["upload_tab_image"] if asset_kind == "image" else SELECTORS["upload_tab_video"]
+    input_selector = SELECTORS["image_inputs"] if asset_kind == "image" else SELECTORS["video_inputs"]
     for chunk in selector.split(", "):
         try:
             locator = page.locator(chunk.strip())
-            if locator.count() > 0 and locator.first.is_visible(timeout=1500):
-                locator.first.click(timeout=3000)
+            count = locator.count()
+            for index in range(count - 1, -1, -1):
+                candidate = locator.nth(index)
+                if not candidate.is_visible(timeout=500):
+                    continue
+                box = candidate.bounding_box(timeout=1000)
+                if not box or box["x"] < 0 or box["y"] < 0:
+                    continue
+                candidate.click(timeout=3000, force=True)
                 page.wait_for_timeout(1500)
-                return
+                if page.locator(input_selector).count() > 0:
+                    return
         except Exception:
             continue
+    raise XhsError(f"upload tab not selected for kind={asset_kind}")
 
 
 def _upload_assets(page: Page, asset_paths: list[Path], asset_kind: str) -> None:
     selector = SELECTORS["video_inputs"] if asset_kind == "video" else SELECTORS["image_inputs"]
+    try:
+        page.wait_for_selector(selector, state="attached", timeout=15000)
+    except PlaywrightTimeoutError:
+        pass
     locator = page.locator(selector)
-    if locator.count() == 0:
+    count = locator.count()
+    if count == 0:
         raise XhsError(f"asset file input not found for kind={asset_kind}")
-    locator.first.set_input_files([str(path) for path in asset_paths])
+    target = locator.first
+    if asset_kind == "image":
+        for index in range(count):
+            candidate = locator.nth(index)
+            try:
+                accept = (candidate.get_attribute("accept", timeout=1000) or "").lower()
+            except Exception:
+                accept = ""
+            if any(ext in accept for ext in ("image", "jpg", "jpeg", "png", "webp")):
+                target = candidate
+                break
+    target.set_input_files([str(path) for path in asset_paths])
     page.wait_for_timeout(4000)
 
 
@@ -252,7 +299,7 @@ def _click_publish(page: Page) -> None:
                 if not candidate.is_visible(timeout=500):
                     continue
                 candidate.scroll_into_view_if_needed(timeout=2000)
-                candidate.click(timeout=10000)
+                candidate.click(timeout=10000, force=True)
                 return
         except Exception:
             continue
@@ -296,7 +343,7 @@ def upload_note(
         context = browser.new_context(**context_kwargs)
         page = context.new_page()
         page.goto(settings.creator_publish_url, wait_until="domcontentloaded", timeout=60000)
-        page.wait_for_timeout(3000)
+        _wait_for_publish_app_ready(page)
         if _first_visible(page, SELECTORS["login_markers"]):
             raise XhsLoginExpiredError("登录态失效,请运行 xhs login --fresh")
 

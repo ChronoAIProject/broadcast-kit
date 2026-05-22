@@ -91,15 +91,19 @@ def verify_in_queue(
     page.wait_for_timeout(4000)
     if _any_text_visible(page, QUEUE_SELECTORS["login_markers"]):
         raise QueueVerifyError("queue page redirected to login")
+    body = _body_text(page)
+    all_works_body = body
+
     _click_first_text(page, QUEUE_SELECTORS["scheduled_tab"])
 
     body = _body_text(page)
+    combined_body = body if body == all_works_body else f"{body}\n\n--- all works fallback ---\n{all_works_body}"
     page.screenshot(path=str(png_path), full_page=True)
-    txt_path.write_text(body, encoding="utf-8")
+    txt_path.write_text(combined_body, encoding="utf-8")
 
-    title_found = title in body
+    title_found = title in combined_body
     time_found = bool(schedule_at and any(
-        marker in body for marker in _time_markers(schedule_at)
+        marker in combined_body for marker in _time_markers(schedule_at)
     ))
 
     if title_found and time_found:

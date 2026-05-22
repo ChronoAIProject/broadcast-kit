@@ -97,7 +97,7 @@ JSON or YAML. Example `manifest.yaml`:
 
 ```yaml
 id: XHS-001
-title: "测试标题"
+title: "正式标题"
 body: |
   第一段:一句话钩子。
 
@@ -121,6 +121,17 @@ Constraints (validated by the manifest schema):
 - `body` 1–1000 chars
 - `asset_kind`: `image` (1–18 assets) or `video` (exactly 1 asset)
 - `topics` must be selectable through the XHS topic picker — raw hashtag text in `body` is ignored by XHS as plain text
+
+### Public Content Guard
+
+The XHS manifest parser blocks obvious internal operating language from public
+fields before upload. The guard checks `title`, `body`, and `topics` for terms
+such as `测试`, `短图文版本`, `Test`, `A/B`, `experiment`, and
+`Broadcast Test`.
+
+Keep experiment IDs, variant names, and A/B notes in local state, metrics, or
+manifest metadata fields that are not published. Public fields must read like a
+finished note.
 
 ## Commands
 
@@ -160,6 +171,20 @@ broadcast-kit publish --platform xhs --manifest /path/to/manifest.yaml
 ```
 
 Success detection looks for `发布成功` / `笔记发布成功` in the page body, or `published=true` in the URL. If neither marker hits, treat as `failed` and inspect the latest screenshot.
+
+`published=true` is only a submit-page signal. For production workflows, do a
+post-submit verification pass in the creator center's note manager:
+
+1. Open `https://creator.xiaohongshu.com/new/note-manager` with the same account storage state.
+2. Check `已发布` and `全部笔记`; XHS can briefly show `全部笔记(0)` until the tab refreshes.
+3. Match the note by title and publish time.
+4. Open `编辑` and verify the actual public body and media count.
+5. Treat the note as published only after the manager row or edit page confirms it.
+
+When editing an existing image note, uploading a new image set can append files
+unless the "重新上传将会清空已上传的图片" confirmation is accepted. Confirm
+the media count after repair, for example `5/18` rather than an accidental
+`10/18`.
 
 ## Multi-account
 
