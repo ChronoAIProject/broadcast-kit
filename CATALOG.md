@@ -180,19 +180,19 @@ CLI: not yet (call via Python).
 #### 2f. engagement_score — post-publish scoring (pure math)
 
 ```python
-from broadcast_kit.optimizers import heavy_ranker_score, phoenix_composite, rank_records
+from broadcast_kit.optimizers import composite_score, heavy_ranker_score, rank_records
 
 # HeavyRanker (public weights from twitter/the-algorithm; for X)
 heavy_ranker_score({"reply": 5, "favorite": 100, "retweet": 10})  # → 127.5
 
-# Phoenix composite (lexa-story-derived; works on any platform)
-phoenix_composite({"replies": 5, "favorites": 100, "impressions": 10000})  # → 28.75
+# Weighted composite (works on any platform)
+composite_score({"replies": 5, "favorites": 100, "impressions": 10000})  # → 28.75
 
 # Rank a jsonl of records
-ranked = rank_records(records, scorer="phoenix")
+ranked = rank_records(records, scorer="composite")
 ```
 
-CLI: `broadcast-kit optimize engagement --metrics metrics.jsonl --scorer phoenix`
+CLI: `broadcast-kit optimize engagement --metrics metrics.jsonl --scorer composite`
 
 **When**: immediately after `fetch-metrics` to identify high-resonance posts.
 
@@ -419,8 +419,8 @@ User has already published 50 things and wants to find the patterns:
 
 ```bash
 broadcast-kit fetch-metrics --platform x --account <handle>
-broadcast-kit optimize engagement --metrics state/x/work/metrics/<handle>/<date>.jsonl --scorer heavy_ranker
-broadcast-kit optimize engagement --metrics ... --scorer phoenix
+broadcast-kit optimize engagement --metrics state/x/work/metrics/<handle>/<date>.jsonl --scorer heavy
+broadcast-kit optimize engagement --metrics ... --scorer composite
 ```
 
 Then in Python: `analyze_misses(some_new_draft)` to get the diff-explain.
@@ -482,7 +482,7 @@ broadcast_kit/optimizers/
   market_role.py       # vendored strategist persona polish
   virality_check.py    # bitgrit + higgsfield CLI
   miss_analysis.py     # top-K + LLM diff
-  engagement_score.py  # HeavyRanker + Phoenix composite (pure math)
+  engagement_score.py  # HeavyRanker + weighted composite (pure math)
   playbook.py          # Pydantic schema for state/playbook/<platform>.yaml
   llm.py               # openai / anthropic / ollama provider abstraction
   role_agents/         # vendored MIT prompts from msitarzewski/agency-agents

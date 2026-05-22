@@ -107,7 +107,7 @@ class ReviewerReport:
         }
 
 
-# Severity → numeric score table from lexa-story local_reviewer.
+# Severity to numeric score table used by the bundled reviewer rubrics.
 SEVERITY_SCORE: dict[Severity, int] = {
     "OK": 0,
     "WARN": -3,

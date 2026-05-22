@@ -14,7 +14,7 @@ Use this skill when you want to polish a draft before calling `broadcast-publish
 - Draft input is a YAML/JSON file with at minimum `platform` (x|xhs|douyin) and `body`.
 - The reviewer's `publish_threshold` is -5 in the bundled rubrics; a composite score below threshold means do NOT publish without revising.
 - Treat `content_brain.publish_decision == "hold"` as a hard stop.
-- `engagement_score` is pure math; no LLM, no env. HeavyRanker weights apply to X-style records; Phoenix weights apply to any platform with engagement metrics.
+- `engagement_score` is pure math; no LLM, no env. HeavyRanker weights apply to X-style records; weighted composite scoring applies to any platform with engagement metrics.
 
 ## Command Template
 
@@ -39,8 +39,8 @@ broadcast-kit optimize variants --draft draft.yaml --n 3
 Rank post-publish metrics:
 
 ```bash
-broadcast-kit optimize engagement --metrics state/douyin/work/metrics/default/<date>.jsonl --scorer phoenix
-broadcast-kit optimize engagement --metrics x_posts.jsonl --scorer heavy_ranker
+broadcast-kit optimize engagement --metrics state/douyin/work/metrics/default/<date>.jsonl --scorer composite
+broadcast-kit optimize engagement --metrics x_posts.jsonl --scorer heavy
 ```
 
 See `docs/optimizers.md` for return shapes, Python-level usage, custom rubric format, and the source of every weight.

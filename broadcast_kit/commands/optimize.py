@@ -15,9 +15,7 @@ from broadcast_kit.optimizers import (
     Rubric,
     analyze,
     best_variant,
-    heavy_ranker_score,
     load_rubric,
-    phoenix_composite,
     rank_records,
     review,
 )
@@ -81,8 +79,10 @@ def variants(draft_path: Path, n: int) -> dict[str, Any]:
 
 
 def engagement(metrics_path: Path, scorer: str) -> dict[str, Any]:
-    if scorer not in {"phoenix", "heavy_ranker"}:
-        raise ContractError("scorer must be phoenix or heavy_ranker")
+    scorer_aliases = {"heavy_ranker": "heavy"}
+    normalized_scorer = scorer_aliases.get(scorer, scorer)
+    if normalized_scorer not in {"composite", "heavy"}:
+        raise ContractError("scorer must be composite or heavy")
     if not metrics_path.exists():
         raise ContractError(f"metrics file does not exist: {metrics_path}")
     records: list[dict[str, Any]] = []
@@ -91,11 +91,11 @@ def engagement(metrics_path: Path, scorer: str) -> dict[str, Any]:
         if not line:
             continue
         records.append(json.loads(line))
-    ranked = rank_records(records, scorer=scorer)
+    ranked = rank_records(records, scorer=normalized_scorer)
     top = ranked[:5]
     return {
         "status": "ok",
-        "scorer": scorer,
+        "scorer": normalized_scorer,
         "records": len(ranked),
         "top": [{"_score": r["_score"], "_rank": r["_rank"], "title": r.get("title") or r.get("content_id")} for r in top],
     }

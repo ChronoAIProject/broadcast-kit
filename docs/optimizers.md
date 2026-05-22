@@ -160,10 +160,10 @@ HEAVY_RANKER_DEFAULT_WEIGHTS = {
 }
 ```
 
-**Phoenix composite** (from lexa-story engagement loop):
+**Weighted composite** (platform-neutral engagement scoring):
 
 ```python
-PHOENIX_DEFAULT_WEIGHTS = {
+COMPOSITE_DEFAULT_WEIGHTS = {
     "replies": 3.0,
     "quotes": 2.5,
     "reposts": 2.0,
@@ -177,19 +177,19 @@ PHOENIX_DEFAULT_WEIGHTS = {
 CLI ranks the records in a metrics jsonl and shows the top 5:
 
 ```bash
-broadcast-kit optimize engagement --metrics state/douyin/work/metrics/default/2026-05-19.jsonl --scorer phoenix
-broadcast-kit optimize engagement --metrics x_posts.jsonl --scorer heavy_ranker
+broadcast-kit optimize engagement --metrics state/douyin/work/metrics/default/2026-05-19.jsonl --scorer composite
+broadcast-kit optimize engagement --metrics x_posts.jsonl --scorer heavy
 ```
 
 In Python:
 
 ```python
-from broadcast_kit.optimizers import heavy_ranker_score, phoenix_composite, rank_records
+from broadcast_kit.optimizers import composite_score, heavy_ranker_score, rank_records
 
 heavy_ranker_score({"reply": 5, "favorite": 100, "retweet": 10})   # 127.5
-phoenix_composite({"replies": 5, "favorites": 100, "impressions": 10000})  # ~28.75
+composite_score({"replies": 5, "favorites": 100, "impressions": 10000})  # ~28.75
 
-ranked = rank_records(records, scorer="phoenix")
+ranked = rank_records(records, scorer="composite")
 ```
 
 ## When to use what
@@ -205,8 +205,8 @@ ranked = rank_records(records, scorer="phoenix")
 ## Why these weights
 
 - **HeavyRanker weights** are documented in `twitter/the-algorithm`'s public release. They are facts about Twitter's 2023 scoring; not AGPL-restricted.
-- **Phoenix composite weights** come from lexa-story's engagement reinforcement loop, which uses Twitter's published action taxonomy as a feedback label.
-- **Severity table** (-10 / -3 / 0) and the 10-dimension rubric structure come from lexa-story's `tools/local_reviewer/cli.py`.
+- **Composite weights** are a simple default for cross-platform engagement ranking. They are intentionally overridable.
+- **Severity table** (-10 / -3 / 0) and the 10-dimension rubric structure are bundled defaults for the reviewer optimizer.
 - **Structured diagnostic shape** (audience / core_conflict / hook_options / title_options / ai_taste_issues / publish_decision) comes from the dayou-content dbskill output schema, generalized away from the 八字/紫微 specifics.
 
 You can replace any of these with your own values — every weight, threshold, rubric, and prompt is overridable through env, function arg, or `--rubric`.

@@ -9,8 +9,8 @@ Modules:
 - `variants`       — generate N variants of a draft and rank them by reviewer score.
 - `market_role`    — apply a vendored marketing-strategist persona prompt (Douyin / XHS / X / Growth).
 - `virality_check` — pre-publish virality scoring via bitgrit (text) and Higgsfield CLI (video).
-- `miss_analysis`  — rank corpus by Phoenix composite, LLM-explain why winners beat the draft.
-- `engagement_score` — pure-math scoring of post-publish metrics (HeavyRanker + Phoenix composite).
+- `miss_analysis`  — rank corpus by composite score, LLM-explain why winners beat the draft.
+- `engagement_score` — pure-math scoring of post-publish metrics (HeavyRanker + weighted composite).
 - `playbook`       — Pydantic schema for `state/playbook/<platform>.yaml`.
 
 Optimizers are optional. Publishers do not require them. Use them when you want
@@ -34,10 +34,10 @@ from .base import (
 )
 from .content_brain import adopted_summary, analyze
 from .engagement_score import (
+    COMPOSITE_DEFAULT_WEIGHTS,
     HEAVY_RANKER_DEFAULT_WEIGHTS,
-    PHOENIX_DEFAULT_WEIGHTS,
+    composite_score,
     heavy_ranker_score,
-    phoenix_composite,
     rank_records,
     score_record,
 )
@@ -81,6 +81,7 @@ from .virality_check import score as virality_score
 
 __all__ = [
     "BITGRIT_ENDPOINT",
+    "COMPOSITE_DEFAULT_WEIGHTS",
     "ContentBrainReport",
     "CurrentState",
     "Draft",
@@ -92,7 +93,6 @@ __all__ = [
     "MissAnalysisConfig",
     "MissAnalysisReport",
     "OptimizerError",
-    "PHOENIX_DEFAULT_WEIGHTS",
     "PerTaskTargets",
     "Platform",
     "Playbook",
@@ -114,6 +114,7 @@ __all__ = [
     "bitgrit",
     "call_llm_json",
     "chain_polish",
+    "composite_score",
     "compute_composite",
     "evolve_playbook",
     "generate_variants",
@@ -126,7 +127,6 @@ __all__ = [
     "load_playbook",
     "load_role_prompt",
     "load_rubric",
-    "phoenix_composite",
     "polish",
     "rank_drafts",
     "rank_records",

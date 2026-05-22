@@ -2,20 +2,8 @@
 
 A self-contained, agent-facing publisher kit. Clone, install, log in once per platform, publish. Optional polish + scoring layer for content optimization sprints.
 
-> Part of the 4-piece Omega broadcast architecture (local harness + this toolkit + two content repos). See [`docs/broadcast-architecture.md`](docs/broadcast-architecture.md) for where this kit fits.
-
 **Publishers**: Douyin (full Playwright + scheduled + queue verify + metrics), XHS (Playwright note publish), X (NyxID-brokered or direct API).
-**Optimizers (optional)**: content_brain (LLM diagnostic, dbskill-style), market_role (vendored marketing-persona prompts), reviewer (10-dim severity audit with bundled rubrics), variants (A/B generate+rank), virality_check (Higgsfield CLI + bitgrit API), miss_analysis (top-K corpus + LLM diff), engagement_score (HeavyRanker + Phoenix math), playbook (sprint schema).
-
-## Omega Local Harness Boundary
-
-This repo is the generic toolkit. Omega-specific local operations live beside it:
-
-```text
-../omega-broadcast-local
-```
-
-If an agent is working on Omega-specific publishing state, content registries, raw metrics, account cookies, or campaign feedback, read [`docs/omega-local-harness.md`](docs/omega-local-harness.md) first and keep that state out of this reusable toolkit.
+**Optimizers (optional)**: content_brain (LLM diagnostic, dbskill-style), market_role (vendored marketing-persona prompts), reviewer (10-dim severity audit with bundled rubrics), variants (A/B generate+rank), virality_check (Higgsfield CLI + bitgrit API), miss_analysis (top-K corpus + LLM diff), engagement_score (HeavyRanker + weighted composite scoring), playbook (sprint schema).
 
 ## For agents reading this for the first time
 
@@ -91,8 +79,8 @@ broadcast-kit optimize reviewer --draft draft.yaml --max-rounds 3
 # Generate N variants and pick the best by reviewer score
 broadcast-kit optimize variants --draft draft.yaml --n 3
 
-# Score post-publish metrics with HeavyRanker (X) or Phoenix-composite weights
-broadcast-kit optimize engagement --metrics metrics.jsonl --scorer phoenix
+# Score post-publish metrics with HeavyRanker (X) or platform-neutral composite weights
+broadcast-kit optimize engagement --metrics metrics.jsonl --scorer composite
 ```
 
 Configure the LLM provider via env: `BROADCAST_KIT_LLM_PROVIDER=openai|anthropic|ollama`, plus the matching API key. See `docs/optimizers.md`.

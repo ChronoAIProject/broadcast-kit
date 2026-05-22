@@ -1,6 +1,5 @@
 """N-dimension severity-weighted reviewer.
 
-Modeled on lexa-story's ``tools/local_reviewer/cli.py`` 10-dimension audit.
 A YAML rubric defines the dimensions, weights, and severity hints for a
 platform. An LLM scores the draft against each dimension and emits a list
 of `ReviewerFinding`. The composite score is the weighted sum (from

@@ -36,7 +36,7 @@ class PublicGuardTest(unittest.TestCase):
             assert_manifest_public_ready(
                 {
                     "title": "正式标题",
-                    "body": "Omega Broadcast Test",
+                    "body": "Internal Broadcast Test",
                 },
                 "xhs",
             )

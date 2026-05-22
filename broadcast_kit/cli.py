@@ -173,7 +173,7 @@ if typer is not None:
     @optimize_app.command("engagement")
     def optimize_engagement(
         metrics: Path = typer.Option(..., "--metrics", exists=True, help="Metrics JSONL path."),
-        scorer: str = typer.Option("phoenix", "--scorer", help="phoenix or heavy_ranker."),
+        scorer: str = typer.Option("composite", "--scorer", help="composite or heavy."),
     ) -> None:
         _handle(optimize_cmd.engagement, metrics, scorer)
 

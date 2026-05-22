@@ -4,7 +4,7 @@ Pipeline (v1, no embeddings):
 
 1. Load the per-platform jsonl corpus at ``state/corpus/<platform>.jsonl``.
 2. Filter to records snapshotted within ``window_days`` of now.
-3. Rank by the Phoenix composite (via ``rank_records``) and take top K.
+3. Rank by weighted engagement composite (via ``rank_records``) and take top K.
 4. Ask an LLM, given the top K and the new draft, to diff-explain the gap and
    emit concrete revisions plus hook/title examples. Strict JSON in/out.
 
@@ -122,11 +122,11 @@ def top_performers(
     window_days: int = 30,
     root: Path | None = None,
 ) -> list[dict[str, Any]]:
-    """Load the corpus, Phoenix-rank, return the top ``k`` annotated records."""
+    """Load the corpus, composite-rank, return the top ``k`` annotated records."""
     records = load_corpus(platform, root=root, window_days=window_days)
     if not records:
         return []
-    ranked = rank_records(records, scorer="phoenix")
+    ranked = rank_records(records, scorer="composite")
     return ranked[: max(0, k)]
 
 
@@ -178,7 +178,7 @@ def _build_user_prompt(draft: Draft, performers: list[dict[str, Any]]) -> str:
     }
     return (
         "PLATFORM: " + draft.platform + "\n\n"
-        "TOP PERFORMERS (most recent window, ranked by Phoenix composite):\n"
+        "TOP PERFORMERS (most recent window, ranked by weighted engagement composite):\n"
         + json.dumps(compact, ensure_ascii=False, indent=2)
         + "\n\nNEW DRAFT (under review):\n"
         + json.dumps(

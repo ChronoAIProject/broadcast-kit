@@ -145,7 +145,7 @@ def _parse_number(value: str | None) -> int | float | None:
 def _split_title_caption(line: str, title_suffix: str | None) -> tuple[str, str | None]:
     """Optionally split a combined title+caption line.
 
-    If DOUYIN_METRICS_TITLE_SUFFIX is set (e.g. "Omega 重读易经"), the parser
+    If DOUYIN_METRICS_TITLE_SUFFIX is set (e.g. "Series Name"), the parser
     looks for "<suffix>" or "：<suffix>" / ": <suffix>" inside the line; the
     title is everything up to and including the suffix, the caption is what
     follows. If no suffix is configured, the entire line is the title and

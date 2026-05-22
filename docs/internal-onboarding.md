@@ -12,7 +12,7 @@ If your machine also has NotebookLM and SlideSync configured, it can generate th
 
 - A Mac (the publishers need a visible browser window)
 - About 30 minutes for first-time setup
-- A Chrono Google account for NotebookLM
+- An account with access to NotebookLM, if you plan to use source-to-video generation
 - A Douyin creator account (扫码 once)
 - A Xiaohongshu creator account (扫码 once)
 
@@ -52,7 +52,7 @@ The wizard checks your machine, then asks a few questions:
 - **LLM credentials** — pick NyxID (recommended for internal staff) or paste a key.
 - **Douyin login** — answer "yes" when asked. A browser opens; scan the QR code in the Douyin app. Come back to Terminal and press Enter.
 - **Xiaohongshu login** — same flow.
-- **NotebookLM login** — same flow with your Chrono Google account.
+- **NotebookLM login** — same flow with the account you intend to use.
 
 The wizard is safe to re-run. It won't ask you the same question twice unless you pass `--reset`.
 
