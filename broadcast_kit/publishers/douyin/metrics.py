@@ -34,6 +34,7 @@ METRICS_SELECTORS = {
 
 DATA_CENTER_URL = "https://creator.douyin.com/creator-micro/data-center"
 CONTENT_MANAGE_URL = "https://creator.douyin.com/creator-micro/content/manage"
+CONTENT_MANAGE_TABS = ("全部作品", "已发布", "审核中", "定时发布", "未通过")
 
 METRIC_LABELS = {
     "play_count": "播放",
@@ -170,7 +171,13 @@ def _metric_after(block: list[str], label: str) -> str | None:
     return None
 
 
-def _parse_work_block(block: list[str], account: str, days: int, title_suffix: str | None) -> dict[str, Any] | None:
+def _parse_work_block(
+    block: list[str],
+    account: str,
+    days: int,
+    title_suffix: str | None,
+    source_tab: str | None = None,
+) -> dict[str, Any] | None:
     if len(block) < 2:
         return None
     duration = block[0] if _is_duration_line(block[0]) else None
@@ -189,6 +196,7 @@ def _parse_work_block(block: list[str], account: str, days: int, title_suffix: s
         "snapshot_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "days": days,
         "source": "content_manage",
+        "source_tab": source_tab,
         "video_id": None,
         "title": title,
         "caption": caption,
@@ -206,7 +214,13 @@ def _parse_work_block(block: list[str], account: str, days: int, title_suffix: s
     return snapshot
 
 
-def _parse_content_manage_text(text: str, account: str, days: int, title_suffix: str | None) -> list[dict[str, Any]]:
+def _parse_content_manage_text(
+    text: str,
+    account: str,
+    days: int,
+    title_suffix: str | None,
+    source_tab: str | None = None,
+) -> list[dict[str, Any]]:
     """Split the content manage page text into per-work blocks.
 
     A work block starts at a duration line (e.g. "1:23"). If a title_suffix
@@ -227,10 +241,50 @@ def _parse_content_manage_text(text: str, account: str, days: int, title_suffix:
     snapshots: list[dict[str, Any]] = []
     for position, start in enumerate(starts):
         end = starts[position + 1] if position + 1 < len(starts) else len(lines)
-        parsed = _parse_work_block(lines[start:end], account, days, title_suffix)
+        parsed = _parse_work_block(lines[start:end], account, days, title_suffix, source_tab=source_tab)
         if parsed:
             snapshots.append(parsed)
     return snapshots
+
+
+def _click_content_tab(page: Page, tab_name: str) -> bool:
+    try:
+        locator = page.get_by_text(tab_name, exact=True)
+        if locator.count() == 0:
+            locator = page.locator(f"text={tab_name}")
+        if locator.count() == 0:
+            return False
+        locator.first.click(timeout=3000)
+        page.wait_for_timeout(2500)
+        return True
+    except Exception:
+        return False
+
+
+def _snapshot_key(snapshot: dict[str, Any]) -> tuple[str | None, str | None, str | None, str | None]:
+    return (
+        snapshot.get("title"),
+        snapshot.get("status"),
+        snapshot.get("publish_time"),
+        snapshot.get("duration"),
+    )
+
+
+def _dedupe_snapshots(snapshots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: dict[tuple[str | None, str | None, str | None, str | None], dict[str, Any]] = {}
+    for snapshot in snapshots:
+        key = _snapshot_key(snapshot)
+        if not key[0]:
+            continue
+        existing = deduped.get(key)
+        if existing is None:
+            deduped[key] = snapshot
+            continue
+        existing_value_count = sum(1 for name in METRIC_LABELS if existing.get(f"{name}_value") is not None)
+        current_value_count = sum(1 for name in METRIC_LABELS if snapshot.get(f"{name}_value") is not None)
+        if current_value_count > existing_value_count:
+            deduped[key] = snapshot
+    return list(deduped.values())
 
 
 def fetch_metrics(settings: Settings, days: int, account: str = "default") -> Path:
@@ -248,8 +302,20 @@ def fetch_metrics(settings: Settings, days: int, account: str = "default") -> Pa
         page.wait_for_timeout(5000)
         if _any_text_visible(page, METRICS_SELECTORS["login_markers"]):
             raise MetricsError("login state expired")
-        body = _body_text(page)
-        snapshots = _parse_content_manage_text(body, account, days, settings.metrics_title_suffix)
+        for tab_name in CONTENT_MANAGE_TABS:
+            if tab_name != "全部作品":
+                _click_content_tab(page, tab_name)
+            body = _body_text(page)
+            snapshots.extend(
+                _parse_content_manage_text(
+                    body,
+                    account,
+                    days,
+                    settings.metrics_title_suffix,
+                    source_tab=tab_name,
+                )
+            )
+        snapshots = _dedupe_snapshots(snapshots)
         if not snapshots:
             page.goto(DATA_CENTER_URL, wait_until="domcontentloaded", timeout=60000)
             page.wait_for_timeout(5000)
