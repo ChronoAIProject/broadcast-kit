@@ -423,6 +423,240 @@ def _schedule_bound_to_page(page: Page, scheduled_at: datetime) -> bool:
     return any(marker in body for marker in _schedule_markers(scheduled_at))
 
 
+def _visible_inputs(page: Page) -> list:
+    locators = []
+    try:
+        inputs = page.locator("input, textarea, [contenteditable='true']")
+        count = min(inputs.count(), 120)
+    except Exception:
+        return locators
+    for index in range(count):
+        item = inputs.nth(index)
+        try:
+            if item.is_visible(timeout=300):
+                locators.append(item)
+        except Exception:
+            continue
+    return locators
+
+
+def _fill_like_user(locator, value: str) -> bool:
+    try:
+        locator.scroll_into_view_if_needed(timeout=2000)
+        locator.click(timeout=2500, force=True)
+        locator.page.keyboard.press("Meta+A")
+        locator.page.keyboard.press("Backspace")
+        locator.page.keyboard.insert_text(value)
+        locator.page.keyboard.press("Tab")
+        return True
+    except Exception:
+        try:
+            locator.fill(value, timeout=2500)
+            locator.page.keyboard.press("Tab")
+            return True
+        except Exception:
+            return False
+
+
+def _set_input_value_like_react(locator, value: str) -> bool:
+    try:
+        locator.scroll_into_view_if_needed(timeout=2000)
+        locator.evaluate(
+            """(el, value) => {
+                const proto = Object.getPrototypeOf(el);
+                const descriptor = Object.getOwnPropertyDescriptor(proto, "value");
+                if (descriptor && descriptor.set) {
+                    descriptor.set.call(el, value);
+                } else {
+                    el.value = value;
+                }
+                el.dispatchEvent(new Event("input", {bubbles: true}));
+                el.dispatchEvent(new Event("change", {bubbles: true}));
+                el.dispatchEvent(new Event("blur", {bubbles: true}));
+            }""",
+            value,
+        )
+        locator.page.keyboard.press("Tab")
+        return True
+    except Exception:
+        return False
+
+
+def _click_confirm_buttons(page: Page) -> None:
+    for label in ("确定", "确认", "完成"):
+        try:
+            locator = page.get_by_role("button", name=label)
+            if locator.count() == 0:
+                locator = page.locator(f"button:has-text('{label}'), text={label}")
+            for index in range(min(locator.count(), 4)):
+                candidate = locator.nth(index)
+                if candidate.is_visible(timeout=400):
+                    candidate.click(timeout=2000, force=True)
+                    page.wait_for_timeout(1000)
+                    return
+        except Exception:
+            continue
+
+
+def _click_scheduled_toggle(page: Page) -> bool:
+    try:
+        clicked = page.evaluate(
+            """() => {
+                const normalize = (v) => String(v || "").replace(/\\s+/g, " ").trim();
+                const visible = (el) => {
+                    const r = el.getBoundingClientRect();
+                    const s = window.getComputedStyle(el);
+                    return r.width > 1 && r.height > 1 && s.display !== "none" && s.visibility !== "hidden";
+                };
+                const nodes = Array.from(document.querySelectorAll("body *")).filter(visible);
+                const scheduleNodes = nodes.filter((el) => normalize(el.innerText || el.textContent) === "定时发布");
+                const publishTimeNodes = nodes.filter((el) => normalize(el.innerText || el.textContent).includes("发布时间"));
+                const candidates = [];
+                for (const schedule of scheduleNodes) {
+                    const sr = schedule.getBoundingClientRect();
+                    for (const label of publishTimeNodes) {
+                        const lr = label.getBoundingClientRect();
+                        if (Math.abs(sr.y - lr.y) < 80 && sr.x > lr.x) {
+                            candidates.push({el: schedule, score: Math.abs(sr.y - lr.y) + Math.max(0, sr.x - lr.x)});
+                        }
+                    }
+                }
+                candidates.sort((a, b) => a.score - b.score);
+                const target = candidates[0]?.el || scheduleNodes[scheduleNodes.length - 1];
+                if (!target) return false;
+                const clickTarget = target.closest("label, button, [role='radio'], [role='switch']") || target;
+                clickTarget.click();
+                return true;
+            }"""
+        )
+        if clicked:
+            page.wait_for_timeout(1600)
+            return True
+    except Exception:
+        pass
+    candidates = [
+        page.locator("text=发布时间").locator("xpath=ancestor::*[self::div or self::section][1]").locator("text=定时发布"),
+        page.get_by_text("定时发布", exact=True),
+        page.locator("label:has-text('定时发布')"),
+        page.locator("[role='radio']:has-text('定时')"),
+        page.locator("[role='switch']:has-text('定时')"),
+        page.locator("text=定时发布"),
+        page.locator("text=定时"),
+    ]
+    for locator in candidates:
+        try:
+            count = locator.count()
+        except Exception:
+            continue
+        for index in range(count):
+            candidate = locator.nth(index)
+            try:
+                if not candidate.is_visible(timeout=600):
+                    continue
+                candidate.scroll_into_view_if_needed(timeout=2500)
+                candidate.click(timeout=3500, force=True)
+                page.wait_for_timeout(1600)
+                return True
+            except Exception:
+                continue
+    return False
+
+
+def _publish_time_bound(page: Page, scheduled_at: datetime) -> bool:
+    expected = scheduled_at.strftime("%Y-%m-%d %H:%M")
+    try:
+        raw = page.evaluate(
+            """() => {
+                const rows = [];
+                const nodes = Array.from(document.querySelectorAll("body *"));
+                const normalize = (v) => String(v || "").replace(/\\s+/g, " ").trim();
+                const visible = (el) => {
+                    const r = el.getBoundingClientRect();
+                    const s = window.getComputedStyle(el);
+                    return r.width > 1 && r.height > 1 && s.display !== "none" && s.visibility !== "hidden";
+                };
+                for (const el of nodes) {
+                    if (!visible(el)) continue;
+                    const text = normalize(el.innerText || el.textContent || "");
+                    if (text === "发布时间" || text.includes("发布时间")) {
+                        const rect = el.getBoundingClientRect();
+                        rows.push({x: rect.x, y: rect.y, text});
+                    }
+                }
+                const controls = Array.from(document.querySelectorAll("input, textarea, [contenteditable='true']"))
+                    .filter(visible)
+                    .map((el) => {
+                        const r = el.getBoundingClientRect();
+                        return {
+                            x: r.x,
+                            y: r.y,
+                            w: r.width,
+                            h: r.height,
+                            value: el.value || el.innerText || el.textContent || "",
+                            placeholder: el.getAttribute("placeholder") || "",
+                        };
+                    });
+                return {rows, controls};
+            }"""
+        )
+    except Exception:
+        return False
+    if not isinstance(raw, dict):
+        return False
+    label_ys = [
+        float(row.get("y", -9999))
+        for row in raw.get("rows", [])
+        if "发布时间" in str(row.get("text", ""))
+    ]
+    for ctrl in raw.get("controls", []):
+        try:
+            y = float(ctrl.get("y", -9999))
+        except Exception:
+            continue
+        if not any(abs(y - label_y) < 40 for label_y in label_ys):
+            continue
+        if expected in str(ctrl.get("value", "")):
+            return True
+    body = _body_text(page, timeout=8000)
+    return expected in body or _schedule_bound_to_page(page, scheduled_at)
+
+
+def _schedule_inputs(page: Page, scheduled_at: datetime) -> list:
+    expected_date = scheduled_at.strftime("%Y-%m-%d")
+    inputs = sorted(
+        _visible_inputs(page),
+        key=lambda candidate: (candidate.bounding_box(timeout=1000) or {"y": 99999, "x": 99999})["y"],
+    )
+    scored = []
+    for candidate in inputs:
+        try:
+            box = candidate.bounding_box(timeout=1000)
+            if not box:
+                continue
+            placeholder = candidate.get_attribute("placeholder", timeout=500) or ""
+            current = ""
+            try:
+                current = candidate.input_value(timeout=500)
+            except Exception:
+                pass
+            marker_text = placeholder + current
+            if any(word in marker_text for word in ("标题", "简介", "描述")):
+                continue
+            score = 0
+            if "日期" in placeholder or "时间" in placeholder or "发布" in placeholder:
+                score -= 1000
+            if expected_date in current:
+                score -= 900
+            if "日期和时间" in placeholder:
+                score -= 500
+            score += abs(box["y"] - 720)
+            scored.append((score, box, candidate))
+        except Exception:
+            continue
+    scored.sort(key=lambda item: (item[0], item[1]["x"]))
+    return [candidate for _, _, candidate in scored]
+
+
 def _upload_still_running(body: str) -> bool:
     return any(marker in body for marker in ("作品上传中", "请勿关闭页面"))
 
@@ -531,78 +765,32 @@ def _click_submit_publish_button(page: Page) -> None:
 
 def _try_set_scheduled_publish(page: Page, scheduled_at: datetime) -> bool:
     _ensure_schedule_window(scheduled_at)
-    selectors = SELECTORS
-    clicked = False
-    try:
-        radio = page.get_by_text("定时发布", exact=True)
-        if radio.count() > 0:
-            radio.first.scroll_into_view_if_needed(timeout=2000)
-            radio.first.click(timeout=3000)
-            clicked = True
-    except Exception:
-        clicked = False
-    for chunk in selectors["scheduled_toggle"].split(", "):
-        if clicked:
-            break
-        try:
-            locator = page.locator(chunk.strip())
-            if locator.count() == 0:
-                continue
-            locator.first.scroll_into_view_if_needed(timeout=2000)
-            locator.first.click(timeout=3000)
-            clicked = True
-            break
-        except Exception:
-            continue
-    if not clicked:
+    if not _click_scheduled_toggle(page):
         logger.error("scheduled toggle not found")
         return False
-    page.wait_for_timeout(1200)
     date_str = scheduled_at.strftime("%Y-%m-%d")
     time_str = scheduled_at.strftime("%H:%M")
     combined = f"{date_str} {time_str}"
-    filled = False
-    for chunk in selectors["schedule_date_input"].split(", "):
-        try:
-            locator = page.locator(chunk.strip())
-            if locator.count() == 0:
-                continue
-            locator.first.fill(combined, timeout=2500)
-            filled = True
-            break
-        except Exception:
-            continue
-    if not filled:
-        for chunk in selectors["schedule_date_input"].split(", "):
-            try:
-                locator = page.locator(chunk.strip())
-                if locator.count() == 0:
-                    continue
-                locator.first.fill(date_str, timeout=2500)
-                filled = True
-                break
-            except Exception:
-                continue
-    for chunk in selectors["schedule_time_input"].split(", "):
-        try:
-            locator = page.locator(chunk.strip())
-            if locator.count() == 0:
-                continue
-            locator.first.fill(time_str, timeout=2500)
-            break
-        except Exception:
-            continue
-    for chunk in selectors["schedule_confirm_button"].split(", "):
-        try:
-            locator = page.locator(chunk.strip())
-            if locator.count() == 0:
-                continue
-            locator.first.click(timeout=2000)
-            break
-        except Exception:
-            continue
+    attempted = False
+    for candidate in _schedule_inputs(page, scheduled_at)[:8]:
+        for value in (combined, date_str):
+            attempted = _set_input_value_like_react(candidate, value) or _fill_like_user(candidate, value) or attempted
+            page.wait_for_timeout(1000)
+            if value == date_str:
+                page.keyboard.insert_text(" " + time_str)
+                page.keyboard.press("Tab")
+                page.wait_for_timeout(1000)
+            _click_confirm_buttons(page)
+            page.wait_for_timeout(1000)
+            if _publish_time_bound(page, scheduled_at):
+                return True
+
+    _click_confirm_buttons(page)
     page.wait_for_timeout(1500)
-    return filled and _schedule_bound_to_page(page, scheduled_at)
+    if _publish_time_bound(page, scheduled_at):
+        return True
+    logger.error("scheduled time not bound after %s input attempts", "attempted" if attempted else "no")
+    return False
 
 
 def upload_video(
@@ -691,7 +879,7 @@ def upload_video(
                 raise DouyinError("scheduled publish toggle/time fill failed or target time not visible before submit")
 
         _wait_for_upload_ready(page)
-        if scheduled_publish_at is not None and not _schedule_bound_to_page(page, scheduled_publish_at):
+        if scheduled_publish_at is not None and not _publish_time_bound(page, scheduled_publish_at):
             if settings.douyin_keep_open:
                 print("DOUYIN_KEEP_OPEN=1,浏览器保持打开;按 Enter 关闭。")
                 input()

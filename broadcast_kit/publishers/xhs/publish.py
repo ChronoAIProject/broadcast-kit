@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -257,11 +258,65 @@ def _fill_body(page: Page, body: str) -> None:
     raise XhsError("body editor not found")
 
 
+def _plain_text(markdown: str) -> str:
+    text = markdown.replace("\r\n", "\n").replace("\r", "\n")
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            lines.append("")
+            continue
+        line = re.sub(r"^#{1,6}\s*", "", line)
+        line = re.sub(r"^[-*+]\s+", "", line)
+        line = re.sub(r"^\d+[.)]\s+", "", line)
+        line = re.sub(r"`([^`]+)`", r"\1", line)
+        line = re.sub(r"\*\*([^*]+)\*\*", r"\1", line)
+        line = re.sub(r"__([^_]+)__", r"\1", line)
+        line = re.sub(r"\*([^*]+)\*", r"\1", line)
+        line = re.sub(r"_([^_]+)_", r"\1", line)
+        line = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", line)
+        lines.append(line)
+    compact: list[str] = []
+    previous_blank = False
+    for line in lines:
+        blank = not line
+        if blank and previous_blank:
+            continue
+        compact.append(line)
+        previous_blank = blank
+    return "\n".join(compact).strip()
+
+
+def _normalize_topic(topic: str) -> str:
+    return re.sub(r"\s+", "", topic.strip().strip("#").strip())
+
+
+def _topic_candidate_score(text: str, topic: str) -> int | None:
+    normalized = _normalize_topic(text.replace("#", ""))
+    if not normalized:
+        return None
+    if normalized == topic:
+        return 0
+    if normalized.startswith(topic):
+        return 1
+    if topic in normalized:
+        return 2
+    return None
+
+
+def _missing_topics(topics: list[str], selected_topics: list[str]) -> list[str]:
+    selected = {_normalize_topic(topic) for topic in selected_topics}
+    return [_normalize_topic(topic) for topic in topics if _normalize_topic(topic) and _normalize_topic(topic) not in selected]
+
+
 def _select_topics(page: Page, topics: list[str]) -> list[str]:
     selected: list[str] = []
     if not topics:
         return selected
-    for topic in topics:
+    for raw_topic in topics:
+        topic = _normalize_topic(raw_topic)
+        if not topic:
+            continue
         clicked_topic_button = False
         for chunk in SELECTORS["topic_button"].split(", "):
             try:
@@ -281,7 +336,22 @@ def _select_topics(page: Page, topics: list[str]) -> list[str]:
         except Exception:
             continue
         try:
-            page.locator(SELECTORS["topic_candidates"]).first.click(timeout=3000)
+            best = None
+            for chunk in SELECTORS["topic_candidates"].split(", "):
+                locator = page.locator(chunk.strip())
+                for index in range(min(locator.count(), 80)):
+                    candidate = locator.nth(index)
+                    if not candidate.is_visible(timeout=300):
+                        continue
+                    text = " ".join((candidate.inner_text(timeout=500) or "").split())
+                    score = _topic_candidate_score(text, topic)
+                    if score is None:
+                        continue
+                    if best is None or score < best[0]:
+                        best = (score, candidate)
+            if best is None:
+                raise XhsError(f"xhs topic candidate not found: {topic}")
+            best[1].click(timeout=3000, force=True)
             selected.append(topic)
             page.wait_for_timeout(800)
         except Exception:
@@ -290,6 +360,10 @@ def _select_topics(page: Page, topics: list[str]) -> list[str]:
 
 
 def _click_publish(page: Page) -> None:
+    # Local UI patch 2026-05-25:
+    # XHS currently renders a left-sidebar "发布笔记" control that matches the
+    # broad publish selector before the real bottom submit button. Prefer the
+    # main form's lower/right "发布" button and ignore sidebar candidates.
     for chunk in SELECTORS["publish_button"].split(", "):
         try:
             locator = page.locator(chunk.strip())
@@ -297,6 +371,9 @@ def _click_publish(page: Page) -> None:
             for index in range(count - 1, -1, -1):
                 candidate = locator.nth(index)
                 if not candidate.is_visible(timeout=500):
+                    continue
+                box = candidate.bounding_box(timeout=1000)
+                if box and (box["x"] < 220 or box["y"] < 360):
                     continue
                 candidate.scroll_into_view_if_needed(timeout=2000)
                 candidate.click(timeout=10000, force=True)
@@ -354,13 +431,19 @@ def upload_note(
         screenshots.append(_screenshot(page, settings, "upload-after", timestamp))
 
         _fill_title(page, title)
-        _fill_body(page, body)
+        _fill_body(page, _plain_text(body))
         page.wait_for_timeout(1000)
         screenshots.append(_screenshot(page, settings, "meta-after", timestamp))
 
         selected_topics = _select_topics(page, topics)
         page.wait_for_timeout(1000)
         screenshots.append(_screenshot(page, settings, "topics-after", timestamp))
+        missing_topics = _missing_topics(topics, selected_topics)
+        if missing_topics:
+            raise XhsError(
+                "XHS topic selection incomplete; refusing to publish topics as inline hashtags. "
+                f"requested={topics}; selected={selected_topics}; missing={missing_topics}"
+            )
 
         if not submit:
             detail = "dry-run: 未点击最终发布。topics={}".format(selected_topics)
