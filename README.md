@@ -2,7 +2,7 @@
 
 A self-contained, agent-facing publisher kit. Clone, install, log in once per platform, publish. Optional polish + scoring layer for content optimization sprints.
 
-**Publishers**: Douyin (full Playwright + scheduled + queue verify + metrics), XHS (Playwright note publish), X (NyxID-brokered or direct API).
+**Publishers**: Douyin (full Playwright + scheduled + queue verify + metrics), XHS (Playwright note publish), X (NyxID-brokered or direct API), **Reddit** (Playwright stealth + Cloudflare bypass · old.reddit OP-reply + anon shadowban detection), **Discourse** (generic — n8n forum / huggingface community / any self-hosted Discourse · Topic JSON API shadowban detection).
 **Optimizers (optional)**: content_brain (LLM diagnostic, dbskill-style), market_role (vendored marketing-persona prompts), reviewer (10-dim severity audit with bundled rubrics), variants (A/B generate+rank), virality_check (Higgsfield CLI + bitgrit API), miss_analysis (top-K corpus + LLM diff), engagement_score (HeavyRanker + weighted composite scoring), playbook (sprint schema).
 
 ## For agents reading this for the first time
@@ -39,6 +39,8 @@ pip install '.[source-to-video]'
 ```bash
 python -m broadcast_kit.publishers.douyin.cli login --fresh
 python -m broadcast_kit.publishers.xhs.cli login --fresh
+broadcast-kit-reddit login --fresh --account <handle>
+broadcast-kit-discourse login --fresh --account <handle> --instance https://community.n8n.io
 ```
 
 Each opens a non-headless Chromium. Scan QR / finish login. Press Enter in the terminal. `storage_state` is saved to `state/<platform>/auth.json`. Check validity later with `... login` (no `--fresh`).
@@ -92,9 +94,13 @@ Configure the LLM provider via env: `BROADCAST_KIT_LLM_PROVIDER=openai|anthropic
 | `douyin` | `broadcast_kit/publishers/douyin/` | Playwright `storage_state` | Yes | content-manage scraper | Yes (`--account <label>`) |
 | `xhs` | `broadcast_kit/publishers/xhs/` | Playwright `storage_state` | No | not implemented | Yes (`--account <label>`) |
 | `x` | `broadcast_kit/publishers/x.py` | NyxID or `X_BEARER_TOKEN` | n/a | X API v2 | No (future) |
+| `reddit` | `broadcast_kit/publishers/reddit/` | Playwright `storage_state` + stealth | n/a (post on demand) | use Reddit JSON API directly | Yes (`--account <label>`) |
+| `discourse` | `broadcast_kit/publishers/discourse/` | Playwright `storage_state` + stealth (per-instance) | n/a | use Topic JSON API directly | Yes (`--account <label>` × per-instance) |
 | `youtube` | `broadcast_kit/metrics/youtube.py` | `YOUTUBE_API_KEY` | n/a | Data API v3 | n/a |
 
 TikTok and Instagram are intentionally not shipped — we don't ship stubs.
+
+Reddit and Discourse target **peer-help comment-reply** specifically (not OP-post). They share a stealth + storage_state architecture but ship anon-fetch shadowban detection because new-account anti-spam (AutoMod / staff-review staging) silently hides posts on those platforms. See [`docs/publishers/reddit.md`](docs/publishers/reddit.md) and [`docs/publishers/discourse.md`](docs/publishers/discourse.md).
 
 ### Multi-account
 

@@ -1,0 +1,16 @@
+# Reddit comment-reply manifest example
+# Usage:
+#   broadcast-kit-reddit login --fresh --account my_dev_account
+#   broadcast-kit-reddit publish --manifest reddit-manifest.example.yaml --account my_dev_account
+#   broadcast-kit-reddit shadowban-check <posted_url>
+
+id: example-001
+platform: reddit
+thread_url: https://www.reddit.com/r/n8n/comments/1abcdef/some_thread_title/
+body: |
+  Quick note: if you're hitting the "couldn't reach MCP server" issue, the
+  most common cause I've seen is the WAF policy not exempting the SSE path.
+  A pattern some teams use is layering a short-TTL bearer token specifically
+  for the MCP endpoint on top of the WAF exception, so if the bypass rule
+  ever drifts the credential window stays bounded.
+expected_subreddit: n8n  # optional sanity check
