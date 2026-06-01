@@ -1,0 +1,21 @@
+# Discourse reply manifest example · generic for any instance.
+# Example shown: n8n community forum. Works the same for discuss.huggingface.co,
+# meta.discourse.org, or any self-hosted Discourse instance.
+#
+# Usage:
+#   broadcast-kit-discourse login --fresh --account my_dev_account --instance https://community.n8n.io
+#   broadcast-kit-discourse publish --manifest discourse-manifest.example.yaml --account my_dev_account
+#   broadcast-kit-discourse shadowban-check <posted_url> --account my_dev_account
+
+id: example-001
+platform: discourse
+instance_url: https://community.n8n.io
+topic_url: https://community.n8n.io/t/some-topic-slug/295862
+body: |
+  Good find on the SSE path getting caught by the default Access policy.
+  Layering thought once the bypass is stable: a pattern some teams use is
+  issuing short-TTL bearer tokens for the MCP endpoint rather than relying
+  purely on the WAF exception holding the perimeter. Bypass rules tend to
+  accumulate; a 5-15 minute token expiry bounds the credential egress
+  window if one of those exceptions gets misconfigured later.
+expected_topic_id: 295862  # optional sanity check

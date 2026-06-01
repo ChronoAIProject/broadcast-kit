@@ -69,17 +69,26 @@ After the user signals the goal, recommend the matching `setup --for` command an
 | `douyin` | `broadcast_kit.publishers.douyin` | Playwright `state/douyin/auth.json` | Yes | content-manage page |
 | `xhs` | `broadcast_kit.publishers.xhs` | Playwright `state/xhs/auth.json` | No | not implemented |
 | `x` | `broadcast_kit.publishers.x` | NyxID or `X_BEARER_TOKEN` | n/a | X API v2 |
+| `reddit` | `broadcast_kit.publishers.reddit` | Playwright `state/reddit/<acct>/auth.json` + stealth | n/a (peer-help comment-reply on demand) | use Reddit JSON API directly |
+| `discourse` | `broadcast_kit.publishers.discourse` | Playwright `state/discourse/<acct>__<host>/auth.json` + stealth | n/a (peer-help reply on demand) | use Topic JSON API directly |
 
 First-time login:
 
 ```bash
 python -m broadcast_kit.publishers.<platform>.cli login --fresh
+# Reddit (per-account):
+broadcast-kit-reddit login --fresh --account <handle>
+# Discourse (per-account · per-instance):
+broadcast-kit-discourse login --fresh --account <handle> --instance https://community.n8n.io
 ```
 
 Publish via CLI:
 
 ```bash
 broadcast-kit publish --platform <p> --manifest <manifest.yaml>
+# OR per-platform CLI:
+broadcast-kit-reddit publish --manifest reddit-manifest.yaml --account <handle>
+broadcast-kit-discourse publish --manifest discourse-manifest.yaml --account <handle>
 ```
 
 Or Python:
@@ -87,9 +96,13 @@ Or Python:
 ```python
 from broadcast_kit.publishers import publish
 result = publish("xhs", job=manifest_dict, dry_run=False, config={"manifest": "/path/to/manifest.yaml"})
+result = publish("reddit", job=reddit_manifest_dict, dry_run=False, config={"account": "my_handle"})
+result = publish("discourse", job=discourse_manifest_dict, dry_run=False, config={"account": "my_handle"})
 ```
 
-See `docs/publishers/{douyin,xhs}.md` for manifest shape, success contract, env vars.
+See `docs/publishers/{douyin,xhs,reddit,discourse}.md` for manifest shape, success contract, env vars.
+
+**Reddit / Discourse vs Douyin / XHS:** the new English-community publishers target **peer-help comment-reply** (existing thread), not OP-post. Cloudflare bypass via `playwright-stealth` (verified · Reddit Cloudflare 1020 only blocks default Chromium). Both ship anon-fetch shadowban detection because AutoMod (Reddit) and staff-staging (Discourse) silently hide new-account posts without leaving "removed" text in HTML. Discourse uses Topic JSON API for accurate post-list comparison.
 
 ### 2. Optimizers (all optional, all compose)
 
