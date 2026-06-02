@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -34,7 +35,7 @@ SELECTORS = {
     "schedule_date_input": "input[placeholder*='日期'], input[placeholder*='发布时间'], input[placeholder*='选择日期'], input[type='date'], input",
     "schedule_time_input": "input[placeholder*='时间'], input[placeholder*='选择时间'], input[type='time']",
     "schedule_confirm_button": "button:has-text('确定'), button:has-text('确认')",
-    "cover_done_buttons": "button:has-text('保存'), button:has-text('我知道了'), button:has-text('暂不设置'), button:has-text('完成'), button:has-text('确定')",
+    "cover_done_buttons": "button:has-text('保存'), button:has-text('我知道了'), button:has-text('完成'), button:has-text('确定')",
 }
 
 
@@ -238,17 +239,74 @@ def _fill_publish_text_fields(page: Page, title: str, description: str) -> None:
             _fill_first(page, SELECTORS["description_inputs"], description)
 
 
-def _upload_cover_axis(page: Page, cover_path: Path, axis_name: str) -> bool:
-    before_count = page.locator(SELECTORS["image_inputs"]).count()
+def _click_cover_button_for_axis(page: Page, axis_name: str) -> bool:
     try:
-        for text_selector in SELECTORS["cover_buttons"].split(", "):
+        clicked = page.evaluate(
+            """(axisName) => {
+                const normalize = (value) => String(value || "").replace(/\\s+/g, "");
+                const visible = (el) => {
+                    const rect = el.getBoundingClientRect();
+                    const style = window.getComputedStyle(el);
+                    return rect.width > 1 && rect.height > 1 && style.display !== "none" && style.visibility !== "hidden";
+                };
+                const nodes = Array.from(document.querySelectorAll("body *")).filter(visible);
+                const axisKey = axisName.includes("竖") ? "竖封面" : "横封面";
+                const axisLabels = nodes
+                    .map((el) => ({el, text: normalize(el.innerText || el.textContent || ""), rect: el.getBoundingClientRect()}))
+                    .filter((item) => item.text.includes(axisKey));
+                const buttons = nodes
+                    .map((el) => ({el, text: normalize(el.innerText || el.textContent || ""), rect: el.getBoundingClientRect()}))
+                    .filter((item) => item.text === "选择封面" || item.text === "设置封面" || item.text === "编辑封面");
+                const candidates = [];
+                for (const label of axisLabels) {
+                    const lx = (label.rect.left + label.rect.right) / 2;
+                    for (const button of buttons) {
+                        const bx = (button.rect.left + button.rect.right) / 2;
+                        const by = (button.rect.top + button.rect.bottom) / 2;
+                        if (by > label.rect.top + 30) continue;
+                        if (Math.abs(bx - lx) > 180) continue;
+                        candidates.push({el: button.el, score: Math.abs(bx - lx) + Math.max(0, label.rect.top - by) * 0.05});
+                    }
+                }
+                candidates.sort((a, b) => a.score - b.score);
+                const target = candidates[0]?.el;
+                if (!target) return false;
+                target.click();
+                return true;
+            }""",
+            axis_name,
+        )
+        if clicked:
+            page.wait_for_timeout(1000)
+            return True
+    except Exception:
+        pass
+    try:
+        buttons = page.get_by_text("选择封面", exact=True)
+        count = buttons.count()
+        if count > 0:
+            index = 1 if "竖" in axis_name and count > 1 else 0
+            buttons.nth(index).click(timeout=3000, force=True)
+            page.wait_for_timeout(1000)
+            return True
+    except Exception:
+        pass
+    for text_selector in SELECTORS["cover_buttons"].split(", "):
+        try:
             locator = page.locator(text_selector)
             if locator.count() > 0:
                 locator.first.click(timeout=3000)
                 page.wait_for_timeout(1000)
-                break
-    except PlaywrightTimeoutError:
-        pass
+                return True
+        except PlaywrightTimeoutError:
+            continue
+    return False
+
+
+def _upload_cover_axis(page: Page, cover_path: Path, axis_name: str) -> bool:
+    before_count = page.locator(SELECTORS["image_inputs"]).count()
+    before_placeholders = _cover_choose_placeholders_visible(page)
+    _click_cover_button_for_axis(page, axis_name)
     try:
         after_locator = page.locator(SELECTORS["image_inputs"])
         after_count = after_locator.count()
@@ -257,7 +315,16 @@ def _upload_cover_axis(page: Page, cover_path: Path, axis_name: str) -> bool:
             return False
         after_locator.nth(target_index).set_input_files(str(cover_path))
         page.wait_for_timeout(1800)
-        logger.info("cover axis uploaded: %s count_before=%s", axis_name, before_count)
+        _close_cover_dialog_if_open(page, axis_name)
+        page.wait_for_timeout(1200)
+        after_placeholders = _cover_choose_placeholders_visible(page)
+        logger.info(
+            "cover axis uploaded: %s count_before=%s placeholders=%s->%s",
+            axis_name,
+            before_count,
+            before_placeholders,
+            after_placeholders,
+        )
         return True
     except Exception as exc:
         logger.error("cover axis upload failed: %s %s", axis_name, exc)
@@ -349,8 +416,119 @@ def _cover_image_evidence(page: Page) -> dict[str, int | bool]:
     }
 
 
-def _close_cover_dialog_if_open(page: Page) -> None:
+def _cover_missing_warning_visible(page: Page) -> bool:
+    """Return True when Douyin still warns that the publish form lacks covers."""
+    try:
+        body = _body_text(page, timeout=5000)
+    except Exception:
+        body = ""
+    compact = re.sub(r"\s+", "", body)
+    warning_markers = (
+        "横/竖双封面缺失",
+        "横竖双封面缺失",
+        "封面缺失",
+        "建议同时设置横版和竖版的封面",
+        "建议同时设置横版和竖版封面",
+    )
+    if any(marker in compact for marker in warning_markers):
+        return True
+    try:
+        return bool(
+            page.evaluate(
+                """() => {
+                    const normalize = (value) => String(value || "").replace(/\\s+/g, "");
+                    const visible = (el) => {
+                        const rect = el.getBoundingClientRect();
+                        const style = window.getComputedStyle(el);
+                        return rect.width > 1 && rect.height > 1 && style.display !== "none" && style.visibility !== "hidden";
+                    };
+                    return Array.from(document.querySelectorAll("body *")).some((el) => {
+                        if (!visible(el)) return false;
+                        const text = normalize(el.innerText || el.textContent || "");
+                        return text.includes("封面缺失") || text.includes("横/竖双封面缺失") || text.includes("横竖双封面缺失");
+                    });
+                }"""
+            )
+        )
+    except Exception:
+        return False
+
+
+def _cover_choose_placeholders_visible(page: Page) -> int:
+    """Count visible cover slots that still show Douyin's choose-cover placeholder."""
+    try:
+        return int(
+            page.evaluate(
+                """() => {
+                    const normalize = (value) => String(value || "").replace(/\\s+/g, "");
+                    const visible = (el) => {
+                        const rect = el.getBoundingClientRect();
+                        const style = window.getComputedStyle(el);
+                        return rect.width > 1 && rect.height > 1 && style.display !== "none" && style.visibility !== "hidden";
+                    };
+                    return Array.from(document.querySelectorAll("body *")).filter((el) => {
+                        if (!visible(el)) return false;
+                        const text = normalize(el.innerText || el.textContent || "");
+                        return text === "选择封面";
+                    }).length;
+                }"""
+            )
+        )
+    except Exception:
+        return 0
+
+
+def _cover_publish_ready(page: Page) -> bool:
+    """Strict final cover contract before submit."""
+    horizontal_slot_visible, vertical_slot_visible = _cover_slots_visible(page)
+    cover_image_evidence = _cover_image_evidence(page)
+    return bool(
+        horizontal_slot_visible
+        and vertical_slot_visible
+        and cover_image_evidence["horizontal"]
+        and cover_image_evidence["vertical"]
+        and not _cover_missing_warning_visible(page)
+        and _cover_choose_placeholders_visible(page) == 0
+    )
+
+
+def _handle_cover_flow_prompt(page: Page, axis_name: str) -> bool:
+    try:
+        body = _body_text(page, timeout=2500)
+    except Exception:
+        body = ""
+    if "设置竖封面获得更多流量" not in body and "设置竖封面" not in body:
+        return False
+    if "横" in axis_name:
+        try:
+            locator = page.get_by_role("button", name="设置竖封面")
+            if locator.count() == 0:
+                locator = page.get_by_text("设置竖封面", exact=True)
+            locator.first.click(timeout=3000, force=True)
+            page.wait_for_timeout(1200)
+            return True
+        except Exception:
+            return False
+    try:
+        locator = page.get_by_role("button", name="暂不设置")
+        if locator.count() == 0:
+            locator = page.get_by_text("暂不设置", exact=True)
+        locator.first.click(timeout=3000, force=True)
+        page.wait_for_timeout(1200)
+        return True
+    except Exception:
+        try:
+            page.locator("[aria-label='Close'], button:has-text('×')").first.click(timeout=2000, force=True)
+            page.wait_for_timeout(1000)
+            return True
+        except Exception:
+            return False
+
+
+def _close_cover_dialog_if_open(page: Page, axis_name: str = "") -> None:
     for _ in range(4):
+        if axis_name and _handle_cover_flow_prompt(page, axis_name):
+            continue
         clicked = False
         for chunk in SELECTORS["cover_done_buttons"].split(", "):
             try:
@@ -705,9 +883,61 @@ def _wait_for_upload_ready(page: Page, timeout_seconds: int = 1800) -> None:
 
 def _page_contains_success(page: Page, title: str | None = None) -> bool:
     body = _body_text(page, timeout=5000)
-    if title and title in body and not _upload_still_running(body):
+    if title and title in body and not _upload_still_running(body) and not _publish_form_still_editing(page):
         return True
     return "发布成功" in body or "正在发布" in body
+
+
+def _content_manage_has_title(page: Page, title: str) -> bool:
+    try:
+        body = _body_text(page, timeout=5000)
+    except Exception:
+        body = ""
+    if title not in body:
+        return False
+    if _publish_form_still_editing(page):
+        return False
+    if "作品管理" not in body and "/content/manage" not in page.url:
+        return False
+    return any(marker in body for marker in ("已发布", "审核中", "定时发布", "定时发布中"))
+
+
+def _visible_publish_submit_buttons(page: Page) -> int:
+    """Count visible bottom/form submit buttons that still say exactly 发布."""
+    try:
+        return int(
+            page.evaluate(
+                """() => {
+                    const normalize = (value) => String(value || "").replace(/\\s+/g, " ").trim();
+                    const visible = (el) => {
+                        const rect = el.getBoundingClientRect();
+                        const style = window.getComputedStyle(el);
+                        return rect.width > 30 && rect.height > 24 && style.display !== "none" && style.visibility !== "hidden" && rect.bottom > 0 && rect.top < window.innerHeight;
+                    };
+                    return Array.from(document.querySelectorAll("button,[role=button],body *")).filter((el) => {
+                        if (!visible(el)) return false;
+                        const text = normalize(el.innerText || el.textContent || "");
+                        if (text !== "发布") return false;
+                        const rect = el.getBoundingClientRect();
+                        return rect.x > 180 && rect.y > 450 && rect.width <= 360 && rect.height <= 180;
+                    }).length;
+                }"""
+            )
+        )
+    except Exception:
+        return 0
+
+
+def _publish_form_still_editing(page: Page) -> bool:
+    """True when post-submit state is still the creator upload form."""
+    try:
+        body = _body_text(page, timeout=5000)
+    except Exception:
+        body = ""
+    form_markers = ("基础信息", "作品描述", "发布设置", "设置封面")
+    if _visible_publish_submit_buttons(page) <= 0:
+        return False
+    return any(marker in body for marker in form_markers)
 
 
 def _wait_after_submit(page: Page, title: str, timeout_seconds: int = 120) -> bool:
@@ -727,6 +957,10 @@ def _wait_after_submit(page: Page, title: str, timeout_seconds: int = 120) -> bo
             return True
         if "发布成功" in body and not _upload_still_running(body):
             return True
+        if _content_manage_has_title(page, title) and not _upload_still_running(body):
+            return True
+        if _publish_form_still_editing(page) and not _upload_still_running(body):
+            return False
         status = "uploading" if _upload_still_running(body) else "waiting"
         if status != last_status:
             logger.info("post-submit wait: %s", status)
@@ -854,6 +1088,8 @@ def upload_video(
             and vertical_slot_visible
             and cover_image_evidence["horizontal"]
             and cover_image_evidence["vertical"]
+            and not _cover_missing_warning_visible(page)
+            and _cover_choose_placeholders_visible(page) == 0
         )
         print(
             f"COVER_VERIFY: {cover_verified} | "
@@ -886,6 +1122,10 @@ def upload_video(
             browser.close()
             raise DouyinError("scheduled publish time is not visibly bound before submit; refusing to click publish")
         screenshots.append(_screenshot(page, settings, "publish-before", timestamp))
+        if not _cover_publish_ready(page):
+            raise DouyinError(
+                "COVER_VERIFY failed: cover placeholders or platform cover-missing warning still visible before submit"
+            )
         if not submit:
             detail = "未执行最终发布点击;dry-run 完成"
             if settings.douyin_keep_open:
@@ -901,6 +1141,8 @@ def upload_video(
         page_settled = _wait_after_submit(page, title)
         screenshots.append(_screenshot(page, settings, "publish-after", timestamp))
         success = page_settled and _page_contains_success(page, title=title)
+        if _publish_form_still_editing(page):
+            success = False
 
         queue_status = "not_checked"
         queue_txt: Path | None = None
