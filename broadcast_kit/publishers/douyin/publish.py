@@ -853,8 +853,30 @@ def _pre_submit_upload_still_running(body: str) -> bool:
     )
 
 
-def _pre_submit_upload_failed(body: str) -> bool:
-    return "上传失败" in body
+def _pre_submit_upload_failed(page: Page, body: str) -> bool:
+    if _pre_submit_upload_still_running(body):
+        return False
+    if "上传失败" not in body:
+        return False
+    try:
+        return bool(
+            page.evaluate(
+                """() => {
+                    const visible = (el) => {
+                        const rect = el.getBoundingClientRect();
+                        const style = window.getComputedStyle(el);
+                        return rect.width > 1 && rect.height > 1 && style.display !== "none" && style.visibility !== "hidden";
+                    };
+                    return Array.from(document.querySelectorAll("body *")).some((el) => {
+                        if (!visible(el)) return false;
+                        const text = String(el.innerText || el.textContent || "");
+                        return text.includes("上传失败");
+                    });
+                }"""
+            )
+        )
+    except Exception:
+        return True
 
 
 def _wait_for_upload_ready(page: Page, timeout_seconds: int = 1800) -> None:
@@ -864,7 +886,7 @@ def _wait_for_upload_ready(page: Page, timeout_seconds: int = 1800) -> None:
     stable_count = 0
     while time.monotonic() < deadline:
         body = _body_text(page, timeout=8000)
-        if _pre_submit_upload_failed(body):
+        if _pre_submit_upload_failed(page, body):
             raise DouyinError("video upload failed before submit")
         active = _pre_submit_upload_still_running(body)
         status = "uploading" if active else "ready"
