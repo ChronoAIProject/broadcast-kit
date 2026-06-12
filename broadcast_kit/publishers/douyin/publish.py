@@ -859,24 +859,31 @@ def _pre_submit_upload_failed(page: Page, body: str) -> bool:
     if "上传失败" not in body:
         return False
     try:
-        return bool(
-            page.evaluate(
-                """() => {
-                    const visible = (el) => {
-                        const rect = el.getBoundingClientRect();
-                        const style = window.getComputedStyle(el);
-                        return rect.width > 1 && rect.height > 1 && style.display !== "none" && style.visibility !== "hidden";
-                    };
-                    return Array.from(document.querySelectorAll("body *")).some((el) => {
-                        if (!visible(el)) return false;
-                        const text = String(el.innerText || el.textContent || "");
-                        return text.includes("上传失败");
-                    });
-                }"""
-            )
+        evidence = page.evaluate(
+            """() => {
+                const visible = (el) => {
+                    const rect = el.getBoundingClientRect();
+                    const style = window.getComputedStyle(el);
+                    return rect.width > 1 && rect.height > 1 && style.display !== "none" && style.visibility !== "hidden";
+                };
+                const runningMarkers = ["上传过程中", "当前速度", "剩余时间", "取消上传", "已上传：", "已上传:"];
+                const failureMarkers = ["上传失败", "重新上传", "上传出错"];
+                let running = false;
+                let failed = false;
+                for (const el of Array.from(document.querySelectorAll("body *"))) {
+                    if (!visible(el)) continue;
+                    const text = String(el.innerText || el.textContent || "");
+                    if (runningMarkers.some((marker) => text.includes(marker))) running = true;
+                    if (failureMarkers.some((marker) => text.includes(marker))) failed = true;
+                }
+                return { running, failed };
+            }"""
         )
     except Exception:
         return True
+    if isinstance(evidence, dict) and evidence.get("running"):
+        return False
+    return bool(isinstance(evidence, dict) and evidence.get("failed"))
 
 
 def _wait_for_upload_ready(page: Page, timeout_seconds: int = 1800) -> None:
