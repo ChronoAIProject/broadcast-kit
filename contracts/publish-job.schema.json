@@ -15,7 +15,7 @@
   ],
   "properties": {
     "publish_job_id": { "type": "string", "minLength": 1 },
-    "platform": { "type": "string", "enum": ["douyin", "xhs", "x"] },
+    "platform": { "type": "string", "enum": ["douyin", "xhs", "x", "reddit", "discourse"] },
     "account_label": { "type": "string" },
     "content_id": { "type": "string" },
     "title": { "type": "string" },
@@ -42,6 +42,14 @@
     },
     {
       "if": { "properties": { "platform": { "const": "x" } } },
+      "then": { "required": ["body"] }
+    },
+    {
+      "if": { "properties": { "platform": { "const": "reddit" } } },
+      "then": { "required": ["body"] }
+    },
+    {
+      "if": { "properties": { "platform": { "const": "discourse" } } },
       "then": { "required": ["body"] }
     }
   ]

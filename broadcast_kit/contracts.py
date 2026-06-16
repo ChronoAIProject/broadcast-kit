@@ -29,7 +29,7 @@ class ContractResult:
     data: dict[str, Any]
 
 
-PLATFORMS = {"douyin", "xhs", "x", "all"}
+PLATFORMS = {"douyin", "xhs", "x", "reddit", "discourse", "all"}
 METRIC_PLATFORMS = {"douyin", "xhs", "x", "youtube", "all"}
 FORBIDDEN_DOUYIN_CAPTION_TERMS = ("来源", "*", "notebooklm", "slidesync", "#notebooklm")
 
@@ -126,6 +126,10 @@ def validate_publish_job(data: dict[str, Any], path: Path | None = None, platfor
     elif data["platform"] == "xhs":
         ensure_keys(data, ["caption", "hashtags", "schedule_at"], "publish-job")
     elif data["platform"] == "x":
+        ensure_keys(data, ["body"], "publish-job")
+    elif data["platform"] == "reddit":
+        ensure_keys(data, ["body"], "publish-job")
+    elif data["platform"] == "discourse":
         ensure_keys(data, ["body"], "publish-job")
     return ContractResult("publish-job", path, data)
 

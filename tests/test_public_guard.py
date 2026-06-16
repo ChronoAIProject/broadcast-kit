@@ -9,6 +9,14 @@ from broadcast_kit.public_guard import (
     assert_manifest_public_ready,
     assert_public_copy_gate,
 )
+from broadcast_kit.publishers.discourse.manifest_schema import (
+    ManifestError as DiscourseManifestError,
+    parse_manifest as parse_discourse,
+)
+from broadcast_kit.publishers.reddit.manifest_schema import (
+    ManifestError as RedditManifestError,
+    parse_manifest as parse_reddit,
+)
 from broadcast_kit.publishers.xhs.manifest_schema import ManifestError, parse_manifest as parse_xhs
 
 
@@ -47,6 +55,52 @@ class PublicGuardTest(unittest.TestCase):
                 "xhs",
             )
         self.assertEqual(ctx.exception.issues[0].field, "body")
+
+    def test_reddit_manifest_ignores_test_in_thread_url(self) -> None:
+        item = parse_reddit(
+            {
+                "id": "reddit-1",
+                "platform": "reddit",
+                "thread_url": "https://old.reddit.com/r/test/comments/abc123/test_thread/",
+                "body": "This is a substantial peer-help reply body.",
+            }
+        )
+        self.assertEqual(item.platform, "reddit")
+
+    def test_reddit_manifest_still_blocks_internal_test_wording_in_body(self) -> None:
+        with self.assertRaises(RedditManifestError):
+            parse_reddit(
+                {
+                    "id": "reddit-2",
+                    "platform": "reddit",
+                    "thread_url": "https://old.reddit.com/r/python/comments/abc123/thread/",
+                    "body": "This is a Broadcast Test reply body.",
+                }
+            )
+
+    def test_discourse_manifest_ignores_test_in_topic_url(self) -> None:
+        item = parse_discourse(
+            {
+                "id": "discourse-1",
+                "platform": "discourse",
+                "instance_url": "https://community.n8n.io",
+                "topic_url": "https://community.n8n.io/t/test-topic/123",
+                "body": "This is a substantial peer-help reply body.",
+            }
+        )
+        self.assertEqual(item.platform, "discourse")
+
+    def test_discourse_manifest_still_blocks_internal_test_wording_in_body(self) -> None:
+        with self.assertRaises(DiscourseManifestError):
+            parse_discourse(
+                {
+                    "id": "discourse-2",
+                    "platform": "discourse",
+                    "instance_url": "https://community.n8n.io",
+                    "topic_url": "https://community.n8n.io/t/real-topic/123",
+                    "body": "This is a test reply body that should be blocked.",
+                }
+            )
 
     def test_public_copy_gate_blocks_thin_caption_and_weak_topics(self) -> None:
         config = PublicCopyGateConfig(

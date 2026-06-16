@@ -32,7 +32,7 @@
       "additionalProperties": true,
       "required": ["platform", "status"],
       "properties": {
-        "platform": { "type": "string", "enum": ["xhs", "x"] },
+        "platform": { "type": "string", "enum": ["xhs", "x", "reddit", "discourse"] },
         "status": { "type": "string", "enum": ["success", "failed", "queued_handoff", "not_submitted", "dry_run", "error", "skipped", "stub"] }
       }
     }
