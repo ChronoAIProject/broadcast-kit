@@ -92,6 +92,14 @@ def public_text_fields_from_manifest(data: Mapping[str, object], platform: str) 
             "caption": data.get("caption"),
             "topics": " ".join(str(item) for item in data.get("topics", []) or []),
         }
+    if platform == "reddit":
+        return {
+            "body": data.get("body"),
+        }
+    if platform == "discourse":
+        return {
+            "body": data.get("body"),
+        }
     return {key: value for key, value in data.items() if isinstance(value, str)}
 
 
