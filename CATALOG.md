@@ -229,6 +229,30 @@ CLI: not yet (call via Python).
 
 Reads `state/corpus/<platform>.jsonl`. The corpus is whatever you've collected via `fetch-metrics`; you decide what gets in.
 
+#### 2h. public_copy_gate — deterministic release gate
+
+```python
+from broadcast_kit.public_guard import PublicCopyGateConfig, assert_public_copy_gate
+
+config = PublicCopyGateConfig(
+    min_compact_chars=90,
+    required_any=("论文", "数学", "证据"),
+    explanatory_markers=("为什么", "不是", "而是", "真正", "问题", "结构", "证据"),
+    min_explanatory_markers=2,
+    allowed_topics=("数学", "科普", "学术", "逻辑"),
+    forbidden_topic_terms=("Omega", "宇宙回声"),
+)
+
+assert_public_copy_gate(
+    title="边界信息为什么会变清楚？",
+    caption="宇宙回声用 Omega 视角读一篇数学论文：...",
+    topics=["数学", "科普", "学术", "逻辑"],
+    config=config,
+)
+```
+
+**When**: before render/publish, especially when a consuming repo needs a fail-closed release gate for platform copy. This is deterministic and does not call an LLM; use it as the judge/publish gate after any writer/critic workflow.
+
 ### 3. Metrics collection
 
 ```bash

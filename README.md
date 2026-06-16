@@ -3,7 +3,7 @@
 A self-contained, agent-facing publisher kit. Clone, install, log in once per platform, publish. Optional polish + scoring layer for content optimization sprints.
 
 **Publishers**: Douyin (full Playwright + scheduled + queue verify + metrics), XHS (Playwright note publish), X (NyxID-brokered or direct API), **Reddit** (Playwright stealth + Cloudflare bypass · old.reddit OP-reply + anon shadowban detection), **Discourse** (generic — n8n forum / huggingface community / any self-hosted Discourse · Topic JSON API shadowban detection).
-**Optimizers (optional)**: content_brain (LLM diagnostic, dbskill-style), market_role (vendored marketing-persona prompts), reviewer (10-dim severity audit with bundled rubrics), variants (A/B generate+rank), virality_check (Higgsfield CLI + bitgrit API), miss_analysis (top-K corpus + LLM diff), engagement_score (HeavyRanker + weighted composite scoring), playbook (sprint schema).
+**Optimizers (optional)**: content_brain (LLM diagnostic, dbskill-style), market_role (vendored marketing-persona prompts), reviewer (10-dim severity audit with bundled rubrics), variants (A/B generate+rank), virality_check (Higgsfield CLI + bitgrit API), miss_analysis (top-K corpus + LLM diff), engagement_score (HeavyRanker + weighted composite scoring), playbook (sprint schema), public_copy_gate (deterministic caption/topic release gate).
 
 ## For agents reading this for the first time
 
@@ -118,6 +118,7 @@ Runtime state (auth cookies, screenshots, scheduled state, metrics jsonl) lives 
 
 - **Douyin**: live success requires `JUDGEMENT: success` + `COVER_VERIFY: True` + `QUEUE_VERIFY: True`. Caption forbidden terms: `来源`, `*`, `notebooklm`, `slidesync`, `#notebooklm`. Manifest needs `id`, `title`, `caption`, `video_file`/`video_url`, `douyin_schedule_publish_at` (ISO 8601 + timezone). Covers auto-generate from a video frame if missing.
 - **Public content guard**: Douyin and XHS manifest parsers reject obvious internal operating language in public text fields, such as `测试`, `短图文版本`, `Test`, `A/B`, `experiment`, and `Broadcast Test`. Keep those words in local metrics/status, not public title/body/caption/topics.
+- **Public copy release gate**: `broadcast_kit.public_guard.PublicCopyGateConfig` and `assert_public_copy_gate(...)` provide a reusable deterministic gate for caption density, required context markers, explanatory markers, allowed platform topics, forbidden public terms, and excessive Latin-letter ratio. Consuming repos should pass their own account-specific markers and topic allowlist.
 - **XHS**: title ≤20 chars, body ≤1000 chars, topics through the topic-picker UI (raw `#hashtag` text is ignored by XHS as plain text). Up to 18 images or exactly 1 video per note. `published=true` is only a submit-page signal; production runs should verify the note in creator-center note manager and confirm the edit page shows the intended public body and media count.
 - **X**: thread separator is `---` between tweets. NyxID is preferred; `X_BEARER_TOKEN` is the fallback.
 - **Dry-run**: every publisher's dry-run mode opens Playwright, exercises every step except the final publish click. Treat it as a smoke test, not a no-op.
