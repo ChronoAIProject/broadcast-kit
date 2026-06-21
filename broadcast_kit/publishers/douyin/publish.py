@@ -418,6 +418,16 @@ def _cover_image_evidence(page: Page) -> dict[str, int | bool]:
 
 def _cover_missing_warning_visible(page: Page) -> bool:
     """Return True when Douyin still warns that the publish form lacks covers."""
+    horizontal_slot_visible, vertical_slot_visible = _cover_slots_visible(page)
+    cover_image_evidence = _cover_image_evidence(page)
+    placeholders = _cover_choose_placeholders_visible(page)
+    has_uploaded_covers = bool(
+        horizontal_slot_visible
+        and vertical_slot_visible
+        and cover_image_evidence["horizontal"]
+        and cover_image_evidence["vertical"]
+        and placeholders == 0
+    )
     try:
         body = _body_text(page, timeout=5000)
     except Exception:
@@ -430,6 +440,14 @@ def _cover_missing_warning_visible(page: Page) -> bool:
         "建议同时设置横版和竖版的封面",
         "建议同时设置横版和竖版封面",
     )
+    if has_uploaded_covers and any(marker in compact for marker in warning_markers):
+        logger.info(
+            "cover assistant warning ignored because uploaded covers are visible: slots=(%s,%s) images=%s",
+            horizontal_slot_visible,
+            vertical_slot_visible,
+            cover_image_evidence,
+        )
+        return False
     if any(marker in compact for marker in warning_markers):
         return True
     try:
